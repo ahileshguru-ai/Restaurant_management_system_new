@@ -1,0 +1,32 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Database files (database can be re-seeded using schema_sqlite.sql & seed_data.sql)
+*.db
+*.sqlite3
+
+# Temporary / Scratch files
+scratch/
+
+# IDE & Editor settings
+.vscode/
+.idea/
+
+# Operating System files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# Environment variables & secrets
+.env
+*.env

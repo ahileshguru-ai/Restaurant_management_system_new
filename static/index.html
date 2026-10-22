@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Role-Based Relational Database Architecture | Restaurant Management</title>
+  <link rel="stylesheet" href="/static/css/bubble_ui.css?v=20261023_1">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🥗</text></svg>">
+</head>
+<body>
+
+  <!-- =====================================================================
+       4-ROLE LOGIN PORTAL (INITIAL STARTUP SCREEN)
+  ===================================================================== -->
+  <div id="loginPortal" class="login-portal-stage">
+    <div class="login-portal-container">
+      
+      <!-- Brand & Welcome Header -->
+      <div class="login-portal-header">
+        <div class="portal-brand-icon">🍽️</div>
+        <h1 class="portal-title">Restaurant Management System</h1>
+        <p class="portal-subtitle">Role-Based Relational DBMS • ACID Transactions • Ferraiolo-Kuhn RBAC</p>
+        <div class="portal-prompt-banner">
+          <span>✨ Select your staff role to sign in to your workspace</span>
+        </div>
+      </div>
+
+      <!-- 4 Role Cards Grid (Default Landing View) -->
+      <div id="roleSelectionGrid" class="role-cards-grid">
+        
+        <!-- Role 1: Shop Manager -->
+        <div class="role-login-card role-card-manager" onclick="App.selectRoleForLogin('Shop Manager')">
+          <div class="role-card-top">
+            <div class="role-icon-box">💻</div>
+            <span class="bubble-badge badge-purple">Executive Admin</span>
+          </div>
+          <h3 class="role-card-title">Shop Manager</h3>
+          <p class="role-card-desc">Financial audit, profit & loss analysis, personnel administration, staff credentialing, and menu management.</p>
+          <div class="role-card-footer">
+            <span class="role-card-action">Login as Shop Manager →</span>
+          </div>
+        </div>
+
+        <!-- Role 2: Kitchen Manager -->
+        <div class="role-login-card role-card-kitchen" onclick="App.selectRoleForLogin('Kitchen Manager')">
+          <div class="role-card-top">
+            <div class="role-icon-box">📟</div>
+            <span class="bubble-badge badge-blue">Kitchen Ops</span>
+          </div>
+          <h3 class="role-card-title">Kitchen Manager</h3>
+          <p class="role-card-desc">Raw material procurement, chef-specific ingredient distribution, recipe batching, and discarded food waste audit.</p>
+          <div class="role-card-footer">
+            <span class="role-card-action">Login as Kitchen Manager →</span>
+          </div>
+        </div>
+
+        <!-- Role 3: Chef -->
+        <div class="role-login-card role-card-chef" onclick="App.selectRoleForLogin('Chef')">
+          <div class="role-card-top">
+            <div class="role-icon-box">👨‍🍳</div>
+            <span class="bubble-badge badge-orange">Station KDS</span>
+          </div>
+          <h3 class="role-card-title">Chef</h3>
+          <p class="role-card-desc">Kitchen Display System (KDS), live order queue, cook status progression, dish cancellations with waste logs, and proposals.</p>
+          <div class="role-card-footer">
+            <span class="role-card-action">Login as Chef →</span>
+          </div>
+        </div>
+
+        <!-- Role 4: Waiter -->
+        <div class="role-login-card role-card-waiter" onclick="App.selectRoleForLogin('Waiter')">
+          <div class="role-card-top">
+            <div class="role-icon-box">📱</div>
+            <span class="bubble-badge badge-green">Floor POS</span>
+          </div>
+          <h3 class="role-card-title">Waiter</h3>
+          <p class="role-card-desc">Dining table matrix, guest seating, ticket generation, menu item ordering, instant kitchen dispatch, and payment checkout.</p>
+          <div class="role-card-footer">
+            <span class="role-card-action">Login as Waiter →</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Role Credential Login Box (Shown when a role card is clicked) -->
+      <div id="roleCredentialBox" class="role-credential-box" style="display:none;">
+        <div class="credential-box-header">
+          <button class="btn-bubble btn-bubble-secondary btn-bubble-sm" onclick="App.backToRoleSelection()">
+            ← Back to Roles
+          </button>
+          <div class="selected-role-pill">
+            <span id="selectedRoleIcon">💻</span>
+            <span id="selectedRoleTitle">Shop Manager Login</span>
+          </div>
+        </div>
+
+        <div class="credential-box-body">
+          <p class="credential-instructions" id="selectedRoleInstructions">
+            Enter your assigned Shop Manager username and password.
+          </p>
+
+          <div id="portalLoginAlert" class="portal-alert-error" style="display:none;"></div>
+
+          <form onsubmit="event.preventDefault(); App.submitPortalLogin();">
+            <div class="form-group" style="margin-bottom:14px;">
+              <label class="form-label" style="display:flex; align-items:center; gap:6px;">
+                <span>👤 Username / Login ID</span>
+              </label>
+              <input type="text" id="portalUsername" class="bubble-input" placeholder="Enter username" autocomplete="username" required>
+            </div>
+
+            <div class="form-group" style="margin-bottom:22px;">
+              <label class="form-label" style="display:flex; align-items:center; justify-content:space-between;">
+                <span>🔒 Password</span>
+                <span class="toggle-pass-link" onclick="App.togglePasswordVisibility('portalPassword', this)">Show</span>
+              </label>
+              <input type="password" id="portalPassword" class="bubble-input" placeholder="Enter password" autocomplete="current-password" required>
+            </div>
+
+            <button type="submit" id="portalLoginBtn" class="btn-bubble btn-bubble-primary btn-bubble-lg" style="width:100%; justify-content:center;">
+              🚀 Sign In
+            </button>
+          </form>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       AUTHENTICATED APPLICATION SHELL & DASHBOARD
+  ===================================================================== -->
+  <div id="authenticatedApp" style="display:none;">
+    
+    <!-- Top Persistent Shell -->
+    <header class="app-topbar">
+      <div class="brand-bubble">
+        <div class="brand-logo-circle">🍽️</div>
+        <div class="brand-title-wrap">
+          <h1>Restaurant Relational DBMS</h1>
+          <p>3NF Normalization • Ferraiolo-Kuhn RBAC • Jim Gray ACID Transactions</p>
+        </div>
+      </div>
+
+      <!-- Clean User Session & Sign Out -->
+      <div class="topbar-session-controls">
+        <div class="user-session-pill">
+          <div class="role-pulse-dot"></div>
+          <div class="user-session-info">
+            <span id="topUserDisplayName" class="user-session-name">Staff</span>
+            <span id="topUserRoleBadge" class="bubble-badge badge-green">Role</span>
+          </div>
+        </div>
+        <button class="btn-bubble btn-bubble-danger btn-bubble-sm" onclick="App.logout()" title="Sign out of system">
+          🚪 Sign Out
+        </button>
+      </div>
+    </header>
+
+    <!-- Operational Viewport Stage -->
+    <main class="viewport-simulator-stage">
+      <div id="deviceFrame" class="viewport-device-frame viewport-mode-fluid">
+      
+      <!-- Device Header -->
+      <div class="device-header">
+        <div class="device-user-info">
+          <div id="topUserAvatar" class="device-avatar-bubble">?</div>
+          <div class="device-user-meta">
+            <h3 id="topUserName">Loading User...</h3>
+            <span id="deviceViewportLabel">Responsive Viewport</span>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <button class="btn-bubble btn-bubble-secondary btn-bubble-sm" onclick="App.startLiveSync(); App.showToast('Data refreshed across dashboards', 'info');">
+            🔄 Sync Live
+          </button>
+        </div>
+      </div>
+
+      <!-- Scrollable Device Content Area -->
+      <div class="device-content-scroll">
+
+        <!-- ===============================================================
+             1. WAITER DASHBOARD (Mobile Viewport: 360px - 480px)
+        =============================================================== -->
+        <div id="waiterDashboard" style="display:none;">
+          <!-- Shift Stats -->
+          <div class="bubble-card" style="padding:14px; margin-bottom:14px; background:var(--brand-green-subtle); border-color:var(--border-green);">
+            <div id="waiterDailyStats"></div>
+          </div>
+
+          <!-- Table Matrix -->
+          <div class="bubble-card">
+            <div class="bubble-card-header">
+              <div class="bubble-card-title">🪑 Floor Tables</div>
+              <span id="selectedTablesLabel" class="bubble-badge badge-green">Tap table(s) to assign</span>
+            </div>
+            <div id="waiterTableGrid" class="table-grid-waiter"></div>
+          </div>
+
+          <!-- Order Creation Builder -->
+          <div class="bubble-card">
+            <div class="bubble-card-header">
+              <div class="bubble-card-title">📝 New Order Ticket</div>
+              <div id="orderBuilderTotal" style="font-size:12px; font-weight:800; color:var(--brand-green-dark);">Total: Rs.0.00</div>
+            </div>
+
+            <div class="form-group" style="margin-bottom:12px;">
+              <label class="form-label">Customer Count</label>
+              <input type="number" id="orderCustomerCountInput" class="bubble-input" value="2" min="1" max="20" style="padding:8px 14px;">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Centralized Menu Selection</label>
+              <div id="waiterMenuPickerList" style="max-height:240px; overflow-y:auto; padding-right:4px;"></div>
+            </div>
+
+            <button class="btn-bubble btn-bubble-primary btn-bubble-lg" onclick="WaiterModule.submitNewOrder()">
+              🚀 Dispatch Order to Kitchen
+            </button>
+          </div>
+
+          <!-- Waiter's Active Open Orders -->
+          <div class="bubble-card">
+            <div class="bubble-card-header">
+              <div class="bubble-card-title">📋 Active Tables & Tickets</div>
+              <span class="bubble-badge badge-blue">Isolated to Your Shift</span>
+            </div>
+            <div id="waiterOrdersList"></div>
+          </div>
+        </div>
+
+        <!-- ===============================================================
+             2. CHEF KDS DASHBOARD (Landscape Viewport: 768px - 1024px+)
+        =============================================================== -->
+        <div id="chefDashboard" style="display:none;">
+          <!-- Top Station Bar -->
+          <div class="bubble-card" style="display:flex; justify-content:space-between; align-items:center; padding:16px 20px;">
+            <div>
+              <h2 style="font-size:18px; font-weight:800;">👨‍🍳 Kitchen Display System (KDS)</h2>
+              <p style="font-size:12px; color:var(--text-muted);">Filtered strictly to dishes assigned to your culinary station</p>
+            </div>
+            <div style="display:flex; gap:10px;">
+              <span id="kdsActiveCountBadge" class="bubble-badge badge-green" style="font-size:13px; padding:6px 14px;">0 Dishes</span>
+              <button class="btn-bubble btn-bubble-secondary btn-bubble-sm" onclick="ChefModule.openMenuProposalModal()">
+                💡 Propose Menu Alteration
+              </button>
+            </div>
+          </div>
+
+          <!-- KDS Ticket Grid -->
+          <div class="bubble-card" style="background:#F8FAFC;">
+            <div class="bubble-card-header">
+              <div class="bubble-card-title">🔥 Live Production Queue</div>
+              <span class="bubble-badge badge-blue">Pending → Cooking → Ready</span>
+            </div>
+            <div id="kdsTicketGrid" class="kds-ticket-grid"></div>
+          </div>
+
+          <!-- Live Menu Availability & Shortage Transaction -->
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
+            <div class="bubble-card">
+              <div class="bubble-card-header">
+                <div class="bubble-card-title">⚡ Live Menu Stock Controls</div>
+                <span class="bubble-badge badge-amber">ACID Shortage Logging</span>
+              </div>
+              <div id="chefDishStockList" style="max-height:260px; overflow-y:auto;"></div>
+            </div>
+
+            <div class="bubble-card">
+              <div class="bubble-card-header">
+                <div class="bubble-card-title">📦 Ingredient Stock Shortage Flags</div>
+                <span class="bubble-badge badge-red">Alerts Kitchen Mgr</span>
+              </div>
+              <div id="chefInventoryFlagsList" style="max-height:260px; overflow-y:auto;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===============================================================
+             3. KITCHEN MANAGER DASHBOARD (Tablet Viewport: 768px - 1024px)
+        =============================================================== -->
+        <div id="kitchenDashboard" style="display:none;">
+          <!-- Top Controls -->
+          <div class="bubble-card" style="display:flex; justify-content:space-between; align-items:center; padding:16px 20px;">
+            <div>
+              <h2 style="font-size:18px; font-weight:800;">📟 Back-of-House Management</h2>
+              <p style="font-size:12px; color:var(--text-muted);">Strictly Single-Seat Account • Raw Material Auditing & Menu Approvals</p>
+            </div>
+            <div style="display:flex; gap:10px;">
+              <button class="btn-bubble btn-bubble-secondary btn-bubble-sm" onclick="KitchenMgrModule.openAddIngredientModal()">
+                + Add Ingredient
+              </button>
+              <button class="btn-bubble btn-bubble-primary btn-bubble-sm" onclick="KitchenMgrModule.openLogProcurementModal()">
+                💰 Log Procurement Expense
+              </button>
+            </div>
+          </div>
+
+          <!-- Dual-Pane Layout -->
+          <div class="km-dual-pane-layout">
+            <!-- Left Pane: Raw Material Inventory & Shortages -->
+            <div>
+              <div class="bubble-card">
+                <div class="bubble-card-header">
+                  <div class="bubble-card-title">🌾 Raw Material Inventory</div>
+                  <span id="kmShortageCountBadge" class="bubble-badge badge-red">0 Shortages Alerted</span>
+                </div>
+                <div id="kmInventoryList" style="max-height:480px; overflow-y:auto;"></div>
+              </div>
+            </div>
+
+            <!-- Right Pane: Menu Approvals & Waste Tracking -->
+            <div>
+              <!-- Menu Approvals -->
+              <div class="bubble-card">
+                <div class="bubble-card-header">
+                  <div class="bubble-card-title">📋 Chef Menu Alteration Proposals</div>
+                  <span class="bubble-badge badge-blue">Menu_Requests Bridge</span>
+                </div>
+                <div id="kmMenuRequestsList" style="max-height:240px; overflow-y:auto;"></div>
+              </div>
+
+              <!-- Waste Tracking -->
+              <div class="bubble-card">
+                <div class="bubble-card-header">
+                  <div class="bubble-card-title">🗑️ Discarded Food & Waste Log</div>
+                  <span id="kmTotalWasteLossLabel" class="bubble-badge badge-red" style="font-weight:800;">Total Loss: Rs.0.00</span>
+                </div>
+                <div id="kmWasteLogsList" style="max-height:200px; overflow-y:auto;"></div>
+              </div>
+
+              <!-- Chef Ratings Summary -->
+              <div class="bubble-card">
+                <div class="bubble-card-header">
+                  <div class="bubble-card-title">⭐ Chef Production & Food Ratings</div>
+                  <span class="bubble-badge badge-green">View_Chef_Performance</span>
+                </div>
+                <div id="kmChefRatingsContainer"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===============================================================
+             4. SHOP MANAGER DASHBOARD (Desktop Viewport: 1280px+)
+        =============================================================== -->
+        <div id="managerDashboard" style="display:none;">
+          <!-- Top Executive Bar -->
+          <div class="bubble-card" style="display:flex; justify-content:space-between; align-items:center; padding:18px 24px;">
+            <div>
+              <h2 style="font-size:20px; font-weight:800;">💻 Executive Business Intelligence Dashboard</h2>
+              <p style="font-size:12px; color:var(--text-muted);">Single-Seat Full Administration • Automated Views • Auditing & Payroll</p>
+            </div>
+            <div style="display:flex; gap:10px;">
+              <button class="btn-bubble btn-bubble-danger btn-bubble-sm" onclick="ShopMgrModule.openHandoverModal()">
+                🔄 Handover Protocol
+              </button>
+              <button class="btn-bubble btn-bubble-secondary btn-bubble-sm" onclick="ShopMgrModule.openLogExpenseModal()">
+                💳 Log Investments / Payroll
+              </button>
+            </div>
+          </div>
+
+          <!-- KPI Bubble Cards -->
+          <div class="manager-kpi-grid">
+            <div class="kpi-bubble-card">
+              <div class="kpi-label">Completed Revenue</div>
+              <div id="kpiTotalRevenue" class="kpi-val">Rs.0.00</div>
+              <div class="kpi-sub">Total incoming ticket billing</div>
+            </div>
+            <div class="kpi-bubble-card" style="border-left-color:#EF4444;">
+              <div class="kpi-label">Total Outgoing Expenses</div>
+              <div id="kpiTotalExpenses" class="kpi-val" style="color:#B91C1C;">Rs.0.00</div>
+              <div class="kpi-sub" style="color:#B91C1C;">Raw materials, payroll, investments</div>
+            </div>
+            <div class="kpi-bubble-card">
+              <div class="kpi-label">Net Profit / Loss</div>
+              <div id="kpiNetProfit" class="kpi-val">Rs.0.00</div>
+              <div class="kpi-sub">Final fiscal margin</div>
+            </div>
+            <div class="kpi-bubble-card" style="border-left-color:#3B82F6;">
+              <div class="kpi-label">Floor Table Occupancy</div>
+              <div id="kpiTableOccupancy" class="kpi-val">0%</div>
+              <div class="kpi-sub" style="color:#1D4ED8;">Active dining tables</div>
+            </div>
+          </div>
+
+          <!-- Section 5: Automated SQL BI Views Leaderboards Grid -->
+          <div class="leaderboards-grid">
+            <!-- 5.1 View_Waiter_Performance -->
+            <div class="bubble-card">
+              <div class="bubble-card-header">
+                <div>
+                  <div class="bubble-card-title">🏆 5.1 Waiter Performance Leaderboard</div>
+                  <div style="font-size:11px; color:var(--text-muted);">Points = Total Customers Handled × Avg Service Rating</div>
+                </div>
+                <span class="bubble-badge badge-green">View_Waiter_Performance</span>
+              </div>
+              <div class="bubble-table-wrapper">
+                <table id="viewWaiterPerformanceTable" class="bubble-table">
+                  <thead>
+                    <tr>
+                      <th>Rank</th>
+                      <th>Waiter</th>
+                      <th>Guests</th>
+                      <th>Rating</th>
+                      <th>Total Points</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- 5.2 View_Chef_Performance -->
+            <div class="bubble-card">
+              <div class="bubble-card-header">
+                <div>
+                  <div class="bubble-card-title">👨‍🍳 5.2 Chef Culinary Production Leaderboard</div>
+                  <div style="font-size:11px; color:var(--text-muted);">Points = Total Dishes Prepared × Avg Food Rating</div>
+                </div>
+                <span class="bubble-badge badge-green">View_Chef_Performance</span>
+              </div>
+              <div class="bubble-table-wrapper">
+                <table id="viewChefPerformanceTable" class="bubble-table">
+                  <thead>
+                    <tr>
+                      <th>Rank</th>
+                      <th>Chef</th>
+                      <th>Prepared</th>
+                      <th>Food Rating</th>
+                      <th>Culinary Points</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 5.3 & 5.4: Daily Collections & Monthly P&L -->
+          <div class="leaderboards-grid">
+            <!-- 5.3 View_Daily_Waiter_Collections -->
+            <div class="bubble-card">
+              <div class="bubble-card-header">
+                <div>
+                  <div class="bubble-card-title">💵 5.3 Daily Financial Reconciliation</div>
+                  <div style="font-size:11px; color:var(--text-muted);">Per-waiter Cash vs UPI breakdown</div>
+                </div>
+                <span class="bubble-badge badge-blue">View_Daily_Waiter_Collections</span>
+              </div>
+              <div class="bubble-table-wrapper">
+                <table id="viewDailyCollectionsTable" class="bubble-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Waiter</th>
+                      <th>Cash</th>
+                      <th>UPI</th>
+                      <th>Total Shift</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- 5.4 View_Monthly_Profit_Loss -->
+            <div class="bubble-card">
+              <div class="bubble-card-header">
+                <div>
+                  <div class="bubble-card-title">📈 5.4 Monthly Profit & Loss Analytics</div>
+                  <div style="font-size:11px; color:var(--text-muted);">Incoming Revenue vs Outgoing Expenses</div>
+                </div>
+                <span class="bubble-badge badge-amber">View_Monthly_Profit_Loss</span>
+              </div>
+              <div class="bubble-table-wrapper">
+                <table id="viewMonthlyProfitLossTable" class="bubble-table">
+                  <thead>
+                    <tr>
+                      <th>Month</th>
+                      <th>Revenue</th>
+                      <th>Expenses</th>
+                      <th>Net P&L</th>
+                      <th>Margin %</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Staff Directory & Salary Management -->
+          <div class="bubble-card">
+            <div class="bubble-card-header">
+              <div class="bubble-card-title">👥 Personnel & Salary Administration</div>
+              <div style="display:flex; gap:10px;">
+                <button class="btn-bubble btn-bubble-primary btn-bubble-sm" onclick="App.openRegisterUserModal()">
+                  + Register Staff Member
+                </button>
+                <span class="bubble-badge badge-green">Staff & Users Tables</span>
+              </div>
+            </div>
+            <div class="bubble-table-wrapper">
+              <table id="staffManagementTable" class="bubble-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Role</th>
+                    <th>Login ID</th>
+                    <th>Shift</th>
+                    <th>Status</th>
+                    <th>Salary (Monthly)</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Audit Logs Grid: Verified Feedbacks & Purchase Expenses -->
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+            <div class="bubble-card">
+              <div class="bubble-card-header">
+                <div class="bubble-card-title">⭐ Verified Customer Feedbacks</div>
+                <span class="bubble-badge badge-green">Anti-Fraud Enforced</span>
+              </div>
+              <div id="mgrFeedbacksList" style="max-height:260px; overflow-y:auto;"></div>
+            </div>
+
+            <div class="bubble-card">
+              <div class="bubble-card-header">
+                <div class="bubble-card-title">🧾 Purchase & Operational Outlays</div>
+                <span class="bubble-badge badge-blue">Purchase_Expenses</span>
+              </div>
+              <div id="mgrExpensesList" style="max-height:260px; overflow-y:auto;"></div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  </main>
+  </div>
+
+  <!-- =====================================================================
+       MODAL 1: CHECKOUT & PAYMENT SPLITS
+  ===================================================================== -->
+  <div id="checkoutModal" class="bubble-modal-backdrop">
+    <div class="bubble-modal-sheet">
+      <div class="modal-head">
+        <h2>💳 Order Checkout & Payment Split</h2>
+        <button class="btn-close-bubble">✕</button>
+      </div>
+
+      <div style="background:var(--bg-subtle); padding:16px; border-radius:18px; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <span id="checkoutOrderIdLabel" style="font-weight:800; font-size:16px;">Order #</span>
+          <div style="font-size:11px; color:var(--text-muted);">Exact payment allocation required</div>
+        </div>
+        <div id="checkoutTotalBillLabel" style="font-size:22px; font-weight:800; color:var(--brand-green-dark);">Rs.0.00</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">💵 Cash Collected (Rs.)</label>
+        <input type="number" id="checkoutCashInput" class="bubble-input" step="0.01" min="0" value="0.00">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">📱 UPI / Digital Payment (Rs.)</label>
+        <input type="number" id="checkoutUpiInput" class="bubble-input" step="0.01" min="0" value="0.00">
+      </div>
+
+      <div style="font-size:11px; color:var(--text-muted); margin-bottom:18px;">
+        * Completing checkout updates order status to 'Completed' and frees assigned tables back to 'Available'.
+      </div>
+
+      <button class="btn-bubble btn-bubble-primary btn-bubble-lg" onclick="WaiterModule.submitCheckout()">
+        ✓ Finalize Bill & Free Tables
+      </button>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       MODAL 2: VERIFIED CUSTOMER FEEDBACK (ANTI-FRAUD GATEKEEPER)
+  ===================================================================== -->
+  <div id="feedbackModal" class="bubble-modal-backdrop">
+    <div class="bubble-modal-sheet">
+      <div class="modal-head">
+        <h2>⭐ Verified Dining Feedback</h2>
+        <button class="btn-close-bubble">✕</button>
+      </div>
+
+      <input type="hidden" id="feedbackOrderId">
+
+      <div style="background:var(--brand-green-subtle); border:1px solid var(--border-green); padding:12px; border-radius:16px; margin-bottom:16px; font-size:11px; color:var(--brand-green-deeper);">
+        <strong>Anti-Fraud Gatekeeper Rule:</strong> When submitting operational ratings, Customer Name and Phone Number are strictly mandatory in the database schema.
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <div class="form-group">
+          <label class="form-label">Customer Name</label>
+          <input type="text" id="fbCustomerName" class="bubble-input" placeholder="e.g. Ramesh K">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Phone Number</label>
+          <input type="tel" id="fbPhoneNumber" class="bubble-input" placeholder="e.g. 9876543210">
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <div class="form-group">
+          <label class="form-label">Service Rating (1-5)</label>
+          <select id="fbServiceRating" class="bubble-input">
+            <option value="">None</option>
+            <option value="5" selected>5 - Excellent</option>
+            <option value="4">4 - Good</option>
+            <option value="3">3 - Average</option>
+            <option value="2">2 - Poor</option>
+            <option value="1">1 - Terrible</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Food Rating (1-5)</label>
+          <select id="fbFoodRating" class="bubble-input">
+            <option value="">None</option>
+            <option value="5" selected>5 - Delicious</option>
+            <option value="4">4 - Tasty</option>
+            <option value="3">3 - Okay</option>
+            <option value="2">2 - Disappointing</option>
+            <option value="1">1 - Bad</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <div class="form-group">
+          <label class="form-label">Ambience Rating (1-5)</label>
+          <select id="fbAmbienceRating" class="bubble-input">
+            <option value="">None</option>
+            <option value="5" selected>5</option>
+            <option value="4">4</option>
+            <option value="3">3</option>
+            <option value="2">2</option>
+            <option value="1">1</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cleanliness Rating (1-5)</label>
+          <select id="fbCleanlinessRating" class="bubble-input">
+            <option value="">None</option>
+            <option value="5" selected>5</option>
+            <option value="4">4</option>
+            <option value="3">3</option>
+            <option value="2">2</option>
+            <option value="1">1</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Customer Review (Optional)</label>
+        <textarea id="fbReviewText" class="bubble-input bubble-textarea" placeholder="Dining comments..."></textarea>
+      </div>
+
+      <button class="btn-bubble btn-bubble-primary btn-bubble-lg" onclick="WaiterModule.submitFeedback()">
+        ✓ Submit Verified Feedback
+      </button>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       MODAL 3: ADD DISH TO ACTIVE TICKET
+  ===================================================================== -->
+  <div id="addDishModal" class="bubble-modal-backdrop">
+    <div class="bubble-modal-sheet">
+      <div class="modal-head">
+        <h2>🍽️ Add Dish to Existing Ticket</h2>
+        <button class="btn-close-bubble">✕</button>
+      </div>
+
+      <input type="hidden" id="addDishOrderId">
+
+      <div class="form-group">
+        <label class="form-label">Select Menu Item</label>
+        <select id="addDishSelect" class="bubble-input"></select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Quantity</label>
+        <input type="number" id="addDishQtyInput" class="bubble-input" value="1" min="1" max="10">
+      </div>
+
+      <button class="btn-bubble btn-bubble-primary btn-bubble-lg" onclick="WaiterModule.submitAddDish()">
+        ✓ Dispatch Dish to Kitchen
+      </button>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       MODAL 4: SINGLE-SEAT HANDOVER PROTOCOL
+  ===================================================================== -->
+  <div id="handoverModal" class="bubble-modal-backdrop">
+    <div class="bubble-modal-sheet">
+      <div class="modal-head">
+        <h2>🔄 Single-Seat Handover Protocol</h2>
+        <button class="btn-close-bubble">✕</button>
+      </div>
+
+      <div style="background:#FFFBEB; border:1px solid #FDE68A; padding:12px; border-radius:16px; margin-bottom:16px; font-size:11px; color:#B45309;">
+        <strong>Jim Gray & David Ferraiolo Handover Specification:</strong><br>
+        1. Hard DELETE outgoing credentials from Users table.<br>
+        2. Soft-retire outgoing manager in Staff (IsActive = 0) to preserve historical audits.<br>
+        3. INSERT incoming employee into Staff.<br>
+        4. INSERT new credentials into Users pointing to new EmployeeID.
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Target Administrative Role</label>
+        <select id="handoverRoleSelect" class="bubble-input">
+          <option value="Kitchen Manager">Kitchen Manager</option>
+          <option value="Shop Manager">Shop Manager</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Incoming Manager Name</label>
+        <input type="text" id="handoverNewName" class="bubble-input" placeholder="e.g. Sangeeta Balan">
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <div class="form-group">
+          <label class="form-label">New Username</label>
+          <input type="text" id="handoverNewUsername" class="bubble-input" placeholder="e.g. sangeeta_km">
+        </div>
+        <div class="form-group">
+          <label class="form-label">New Password</label>
+          <input type="password" id="handoverNewPassword" class="bubble-input" placeholder="New strong password">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Designated Salary (Monthly Rs.)</label>
+        <input type="number" id="handoverSalary" class="bubble-input" value="55000">
+      </div>
+
+      <button class="btn-bubble btn-bubble-danger btn-bubble-lg" onclick="ShopMgrModule.submitHandover()">
+        ⚠️ Execute Handover Transaction
+      </button>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       MODAL 5: LOG PURCHASE EXPENSE (PAYROLL / INVESTMENTS)
+  ===================================================================== -->
+  <div id="logExpenseModal" class="bubble-modal-backdrop">
+    <div class="bubble-modal-sheet">
+      <div class="modal-head">
+        <h2>💳 Log Operational Expense</h2>
+        <button class="btn-close-bubble">✕</button>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Expense Category</label>
+        <select id="logExpType" class="bubble-input">
+          <option value="Payroll">Payroll</option>
+          <option value="Other Investments">Other Investments</option>
+          <option value="Raw Materials">Raw Materials</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Amount (Rs.)</label>
+        <input type="number" id="logExpAmount" class="bubble-input" step="0.01" min="1" placeholder="e.g. 45000.00">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Expense Date</label>
+        <input type="date" id="logExpDate" class="bubble-input">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Expense Description / Particulars</label>
+        <textarea id="logExpDescription" class="bubble-input bubble-textarea" placeholder="e.g. October monthly staff payroll, commercial cookware purchase, or vendor invoice details..."></textarea>
+      </div>
+
+      <button class="btn-bubble btn-bubble-primary btn-bubble-lg" onclick="ShopMgrModule.submitLogExpense()">
+        ✓ Record Purchase Outlay
+      </button>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       MODAL 6: ADD INGREDIENT TO INVENTORY
+  ===================================================================== -->
+  <div id="addIngredientModal" class="bubble-modal-backdrop">
+    <div class="bubble-modal-sheet">
+      <div class="modal-head">
+        <h2>🌾 Register Raw Ingredient</h2>
+        <button class="btn-close-bubble">✕</button>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Ingredient Name</label>
+        <input type="text" id="newIngName" class="bubble-input" placeholder="e.g. Sambar Dal (kg)" autocomplete="off">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Assigned Chef / Culinary Station</label>
+        <select id="newIngChef" class="bubble-input">
+          <option value="">🌐 All Chefs / Shared Kitchen</option>
+          <!-- Populated dynamically with active chefs -->
+        </select>
+        <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">
+          Assigning to a specific chef ensures this ingredient only appears on that chef's login.
+        </div>
+      </div>
+
+      <button class="btn-bubble btn-bubble-primary btn-bubble-lg" onclick="KitchenMgrModule.submitAddIngredient()">
+        ✓ Add to Inventory
+      </button>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       MODAL 7: LOG RAW MATERIAL PROCUREMENT
+  ===================================================================== -->
+  <div id="logProcurementModal" class="bubble-modal-backdrop">
+    <div class="bubble-modal-sheet">
+      <div class="modal-head">
+        <h2>💰 Log Raw Material Purchase</h2>
+        <button class="btn-close-bubble">✕</button>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Date</label>
+        <input type="date" id="procureDate" class="bubble-input">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Procurement Cost (Rs.)</label>
+        <input type="number" id="procureAmount" class="bubble-input" step="0.01" min="1" placeholder="e.g. 15000.00">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Procurement Description / Particulars</label>
+        <textarea id="procureDescription" class="bubble-input bubble-textarea" placeholder="e.g. 50kg Basmati Rice, 20L Desi Ghee & Fresh Dairy procurement from Metro Wholesale..."></textarea>
+      </div>
+
+      <button class="btn-bubble btn-bubble-primary btn-bubble-lg" onclick="KitchenMgrModule.submitLogProcurement()">
+        ✓ Log Raw Material Outlay
+      </button>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       MODAL 8: CHEF MENU PROPOSAL
+  ===================================================================== -->
+  <div id="menuProposalModal" class="bubble-modal-backdrop">
+    <div class="bubble-modal-sheet">
+      <div class="modal-head">
+        <h2>💡 Propose Menu Alteration</h2>
+        <button class="btn-close-bubble">✕</button>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Proposal Type</label>
+        <select id="propRequestType" class="bubble-input" onchange="ChefModule.onProposalTypeChange()">
+          <option value="Add">Add to Menu</option>
+          <option value="Remove">Remove from Menu</option>
+        </select>
+      </div>
+
+      <div class="form-group" id="propDishNameGroup">
+        <label class="form-label">New Dish Name</label>
+        <input type="text" id="propDishName" name="new_dish_name" class="bubble-input" placeholder="e.g. Paneer Tikka Masala" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+      </div>
+
+      <div class="form-group" id="propDishSelectGroup" style="display:none;">
+        <label class="form-label">Select Dish from Menu</label>
+        <select id="propDishSelect" class="bubble-input">
+          <option value="">-- Choose a dish from menu --</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Operational Justification</label>
+        <textarea id="propReason" class="bubble-input bubble-textarea" placeholder="Customer demand, ingredient availability, low sales velocity..."></textarea>
+      </div>
+
+      <button class="btn-bubble btn-bubble-primary btn-bubble-lg" onclick="ChefModule.submitMenuProposal()">
+        ✓ Submit to Kitchen Manager
+      </button>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       MODAL 8B: CHEF FOOD DISCARD / CANCELLATION & WASTE LOG
+  ===================================================================== -->
+  <div id="chefDiscardModal" class="bubble-modal-backdrop">
+    <div class="bubble-modal-sheet">
+      <div class="modal-head">
+        <h2>🗑️ Discard & Cancel Food Order</h2>
+        <button class="btn-close-bubble">✕</button>
+      </div>
+
+      <input type="hidden" id="discardOrderDetailId">
+
+      <div style="background:#FEF2F2; border:1px solid #FECACA; padding:12px; border-radius:16px; margin-bottom:16px; font-size:12px; color:#991B1B;">
+        <div style="font-weight:800; font-size:14px; margin-bottom:4px;" id="discardDishTitle">Dish Name</div>
+        Cancelling this dish will remove it from the live cooking queue and immediately record its raw ingredient cost in the <strong>Kitchen Manager's Discarded Food & Waste Log</strong>.
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Discard Reason</label>
+        <select id="discardReasonPreset" class="bubble-input" onchange="ChefModule.onDiscardPresetChange()">
+          <option value="Food burnt during cooking">Food burnt during cooking</option>
+          <option value="Customer cancelled after prep started">Customer cancelled after prep started</option>
+          <option value="Quality defect / Contamination / Spilled">Quality defect / Contamination / Spilled</option>
+          <option value="Customer allergy notification">Customer allergy notification</option>
+          <option value="Wrong dish preparation">Wrong dish preparation</option>
+          <option value="Custom">Other reason (Specify below)...</option>
+        </select>
+      </div>
+
+      <div class="form-group" id="discardCustomReasonGroup" style="display:none;">
+        <label class="form-label">Custom Details / Notes</label>
+        <input type="text" id="discardCustomReason" class="bubble-input" placeholder="e.g. Pan overheated, food dropped accidentally...">
+      </div>
+
+      <div style="display:flex; gap:10px; margin-top:20px;">
+        <button class="btn-bubble btn-bubble-secondary btn-bubble-lg" style="flex:1;" onclick="ChefModule.closeDiscardModal()">
+          Cancel
+        </button>
+        <button class="btn-bubble btn-bubble-danger btn-bubble-lg" style="flex:2;" onclick="ChefModule.confirmDiscardDish()">
+          🗑️ Confirm Discard & Log Waste
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       MODAL 9: REGISTER NEW USER / STAFF ACCOUNT
+  ===================================================================== -->
+  <div id="registerUserModal" class="bubble-modal-backdrop">
+    <div class="bubble-modal-sheet">
+      <div class="modal-head">
+        <h2>➕ Register New User & Personnel</h2>
+        <button class="btn-close-bubble">✕</button>
+      </div>
+
+      <div style="background:var(--brand-green-subtle); border:1px solid var(--border-green); padding:12px; border-radius:16px; margin-bottom:16px; font-size:12px; color:var(--brand-green-deeper);">
+        <strong>Role-Based User Creation:</strong><br>
+        • Waiters & Chefs support <strong>unlimited concurrent accounts</strong>.<br>
+        • Shop Manager & Kitchen Manager enforce the <strong>Single-Seat constraint</strong> (replaces previous manager via Handover).
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Full Name</label>
+        <input type="text" id="regFullName" class="bubble-input" placeholder="e.g. David Miller">
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <div class="form-group">
+          <label class="form-label">Role</label>
+          <select id="regRoleSelect" class="bubble-input">
+            <option value="Waiter">Waiter</option>
+            <option value="Chef">Chef</option>
+            <option value="Kitchen Manager">Kitchen Manager</option>
+            <option value="Shop Manager">Shop Manager</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Shift</label>
+          <select id="regShiftSelect" class="bubble-input">
+            <option value="Morning Shift">Morning Shift</option>
+            <option value="Evening Shift">Evening Shift</option>
+            <option value="Night Shift">Night Shift</option>
+            <option value="General Shift">General Shift</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Designated Monthly Salary (Rs.)</label>
+        <input type="number" id="regSalary" class="bubble-input" value="30000" min="0">
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <div class="form-group">
+          <label class="form-label">Desired Login ID / Username</label>
+          <input type="text" id="regUsername" class="bubble-input" placeholder="e.g. david_waiter">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <input type="password" id="regPassword" class="bubble-input" placeholder="e.g. mypass123">
+        </div>
+      </div>
+
+      <button class="btn-bubble btn-bubble-primary btn-bubble-lg" onclick="App.submitRegisterUser()">
+        ✓ Create User & Grant Role Permissions
+      </button>
+    </div>
+  </div>
+
+
+
+  <!-- =====================================================================
+       MODAL 11: UPDATE LOGIN ID & PASSWORD
+  ===================================================================== -->
+  <div id="updateCredentialsModal" class="bubble-modal-backdrop">
+    <div class="bubble-modal-sheet">
+      <div class="modal-head">
+        <h2>✏️ Update Login ID & Password</h2>
+        <button class="btn-close-bubble">✕</button>
+      </div>
+
+      <input type="hidden" id="editUserId">
+
+      <div style="margin-bottom:14px; font-size:13px; color:var(--text-secondary);">
+        Editing credentials for: <strong id="editStaffNameLabel">Staff</strong> (<span id="editCurrentUsernameLabel">user</span>)
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">New Username / Login ID (Optional)</label>
+        <input type="text" id="editNewUsername" class="bubble-input" placeholder="Leave blank to keep current">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">New Password (Optional)</label>
+        <input type="password" id="editNewPassword" class="bubble-input" placeholder="Leave blank to keep unchanged">
+      </div>
+
+      <button class="btn-bubble btn-bubble-primary btn-bubble-lg" onclick="App.submitUpdateCredentials()">
+        ✓ Save Updated Credentials
+      </button>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="bubble-toast-container"></div>
+
+  <!-- Application Scripts -->
+  <script src="/static/js/app.js?v=20261023_1"></script>
+  <script src="/static/js/waiter.js?v=20261023_1"></script>
+  <script src="/static/js/chef.js?v=20261023_1"></script>
+  <script src="/static/js/kitchen_mgr.js?v=20261023_1"></script>
+  <script src="/static/js/shop_mgr.js?v=20261023_2"></script>
+</body>
+</html>
