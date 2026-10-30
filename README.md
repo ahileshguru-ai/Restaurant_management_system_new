@@ -285,3 +285,20 @@ http://127.0.0.1:8000
 | **Chef** | `chef_meera` | `chef123` | Station: Biryanis & Tandoor (Dum Biryani, Naan) |
 | **Waiter** | `waiter_rahul` | `waiter123` | Floor: Morning Shift, Multi-Table Tickets |
 | **Waiter** | `waiter_priya` | `waiter123` | Floor: Evening Shift, Multi-Table Tickets |
+
+---
+
+## 9. Top Academic & Technical References
+
+1. **E. F. Codd (1972).** *"Further Normalization of the Data Base Relational Model,"* in *Data Base Systems*, Prentice-Hall, pp. 33–64.  
+   *(Foundational theory for 3NF normalization, eliminating transitive dependencies, and update/deletion anomalies).*
+2. **A. Silberschatz, H. F. Korth, and S. Sudarshan (2019).** *Database System Concepts*, 7th ed. McGraw-Hill Education.  
+   *(Standard curriculum reference for relational schema design, SQL triggers, views, and ACID transaction boundaries).*
+3. **J. Gray (1981).** *"The Transaction Concept: Virtues and Limitations,"* in *Proceedings of the 7th International Conference on Very Large Data Bases (VLDB)*, pp. 144–154.  
+   *(Theoretical basis for atomic order checkout, inventory reservation, and synchronized financial ledgers).*
+4. **D. F. Ferraiolo, R. Sandhu, S. Gavrila, D. R. Kuhn, and R. Chandramouli (2001).** *"Proposed NIST Standard for Role-Based Access Control,"* *ACM Transactions on Information and System Security (TISSEC)*, 4(3), pp. 224–274.  
+   *(Architecture for multi-tiered RBAC across Waiter, Chef, Kitchen Manager, and Shop Manager).*
+5. **N. Provos and D. Mazières (1999).** *"A Future-Adaptable Password Scheme,"* in *Proceedings of the USENIX Annual Technical Conference*, pp. 81–91.  
+   *(Implementation foundation for salted bcrypt password hashing protecting credential records).*
+
+> **Detailed Project Submission Document:** See [PROJECT_REVIEW_SUBMISSION.md](file:///c:/Users/Ahilesh%20Guru%20S/OneDrive/Desktop/DBMS%20vs%20project/project%20code/PROJECT_REVIEW_SUBMISSION.md) for the complete comprehensive review submission, full ER mapping, and viva defense guide.
