@@ -378,3 +378,19 @@ GROUP BY strftime('%Y-%m', o.OrderTimestamp), e.TotalOutgoingExpenses;
 - **Chef KDS (768px - 1024px+ Landscape Monitor):** High-contrast multi-column ticket grid readable from across a hot kitchen station.
 - **Kitchen Manager (768px - 1024px Tablet):** Split view balancing raw inventory shortage queues with menu alteration approvals.
 - **Shop Manager (1280px+ Wide Desktop):** Multi-column dashboard presenting financial reconciliations, leaderboards, and executive controls.
+
+
+---
+
+## 7. Academic & Technical References
+
+1. **Codd, E. F. (1970).** "A Relational Model of Data for Large Shared Data Banks." *Communications of the ACM*, 13(6), 377–387.
+2. **Codd, E. F. (1972).** "Further Normalization of the Data Base Relational Model." In *Data Base Systems*, Prentice-Hall, 33–64.
+3. **Gray, J. (1981).** "The Transaction Concept: Virtues and Limitations." In *Proceedings of the 7th International Conference on Very Large Data Bases (VLDB)*, 144–154.
+4. **Gray, J., & Reuter, A. (1993).** *Transaction Processing: Concepts and Techniques*. Morgan Kaufmann Publishers.
+5. **Ferraiolo, D. F., & Kuhn, D. R. (1992).** "Role-Based Access Controls." In *Proceedings of the 15th National Computer Security Conference*, 554–563.
+6. **Ferraiolo, D. F., Sandhu, R., Gavrila, S., Kuhn, D. R., & Chandramouli, R. (2001).** "Proposed NIST Standard for Role-Based Access Control." *ACM Transactions on Information and System Security (TISSEC)*, 4(3), 224–274.
+7. **Silberschatz, A., Korth, H. F., & Sudarshan, S. (2019).** *Database System Concepts* (7th ed.). McGraw-Hill Education.
+8. **Ramakrishnan, R., & Gehrke, J. (2003).** *Database Management Systems* (3rd ed.). McGraw-Hill Education.
+9. **Provos, N., & Mazières, D. (1999).** "A Future-Adaptable Password Scheme." In *Proceedings of the USENIX Annual Technical Conference*, 81–91.
+10. **Jones, M., Bradley, J., & Sakimura, N. (2015).** "JSON Web Token (JWT)." *RFC 7519*, Internet Engineering Task Force (IETF).
