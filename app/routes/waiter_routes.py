@@ -12,7 +12,8 @@ from typing import List, Optional, Dict, Any
 
 from database.db import (
     get_connection, create_order_with_tables_and_items,
-    add_item_to_order, checkout_order, submit_order_feedback
+    add_item_to_order, checkout_order, submit_order_feedback,
+    waiter_cancel_order_item, waiter_cancel_order
 )
 from app.auth import require_roles
 
@@ -40,6 +41,15 @@ class CancelRequest(BaseModel):
     reason: str = Field(..., min_length=2)
 
 
+class CancelItemRequest(BaseModel):
+    reason: Optional[str] = None
+    cancel_quantity: Optional[int] = Field(None, gt=0, description="Number of portions to cancel. If omitted, cancels entire quantity.")
+
+
+class CancelOrderRequest(BaseModel):
+    reason: Optional[str] = None
+
+
 class CheckoutRequest(BaseModel):
     cash_amount: float = Field(..., ge=0)
     upi_amount: float = Field(..., ge=0)
@@ -57,11 +67,11 @@ class FeedbackRequest(BaseModel):
 
 @router.get("/menu")
 def get_centralized_menu(current_user: Dict[str, Any] = Depends(waiter_guard)):
-    """Returns centralized restaurant menu with availability and assigned chef info."""
+    """Returns centralized restaurant menu with stock quantities, availability and assigned chef info."""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT m.MenuItemID, m.ItemName, m.Category, m.Price, m.IsAvailable,
+        SELECT m.MenuItemID, m.ItemName, m.Category, m.Price, m.StockQuantity, m.IsAvailable,
                m.AssignedChefID, s.Name AS AssignedChefName
         FROM Menu_Items m
         JOIN Staff s ON m.AssignedChefID = s.EmployeeID
@@ -257,6 +267,62 @@ def delete_order_item(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Pre-Cooking Edit Block Trigger: {str(e)}"
         )
+
+
+@router.post("/order-details/{detail_id}/cancel")
+def cancel_individual_dish(
+    detail_id: int,
+    req: Optional[CancelItemRequest] = None,
+    current_user: Dict[str, Any] = Depends(waiter_guard)
+):
+    """
+    Waiter Food Item Cancellation:
+    - If cancelled before cooking (Pending / Cancel Requested): cancelled directly without waste log.
+    - If cancelled during/after cooking (Cooking / Ready): cancelled and logged to Waste_Log.
+    """
+    waiter_id = current_user["EmployeeID"] if current_user["RoleName"] != "Shop Manager" else None
+    reason = req.reason if req else None
+    cancel_quantity = req.cancel_quantity if req else None
+    try:
+        res = waiter_cancel_order_item(
+            order_detail_id=detail_id,
+            reason=reason,
+            waiter_id=waiter_id,
+            cancel_quantity=cancel_quantity
+        )
+        return res
+    except PermissionError as pe:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(pe))
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.post("/orders/{order_id}/cancel")
+def cancel_order(
+    order_id: int,
+    req: Optional[CancelOrderRequest] = None,
+    current_user: Dict[str, Any] = Depends(waiter_guard)
+):
+    """
+    Waiter Entire Order Cancellation:
+    - Dishes during or after cooking ('Cooking', 'Ready') alone go to Waste_Log.
+    - Dishes before cooking ('Pending') do NOT go to Waste_Log.
+    - Order status transitions to 'Cancelled'.
+    - Assigned floor tables are freed back to 'Available'.
+    """
+    waiter_id = current_user["EmployeeID"] if current_user["RoleName"] != "Shop Manager" else None
+    reason = req.reason if req else None
+    try:
+        res = waiter_cancel_order(order_id=order_id, reason=reason, waiter_id=waiter_id)
+        return res
+    except PermissionError as pe:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(pe))
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.post("/orders/{order_id}/checkout")

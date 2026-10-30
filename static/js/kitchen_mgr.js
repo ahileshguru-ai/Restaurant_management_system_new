@@ -354,14 +354,21 @@ const KitchenMgrModule = {
       return;
     }
 
-    container.innerHTML = ratings.map(c => `
-      <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid #F1F5F9; font-size:13px;">
-        <span style="font-weight:700;">${c.ChefName}</span>
-        <span>
-          ⭐ ${c.AvgFoodRating ? c.AvgFoodRating.toFixed(1) : 'N/A'} / 5.0 
-          <span style="color:var(--brand-green-dark); font-weight:700; margin-left:6px;">(${c.CulinaryPerformancePoints || 0} pts)</span>
-        </span>
-      </div>
-    `).join("");
+    container.innerHTML = ratings.map(c => {
+      return `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid #F1F5F9; font-size:13px;">
+          <div>
+            <span style="font-weight:700;">${c.ChefName}</span>
+            <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">
+              ${c.TotalDishesPrepared} dishes prepared
+            </div>
+          </div>
+          <div style="text-align:right;">
+            <div>⭐ ${c.AvgFoodRating ? c.AvgFoodRating.toFixed(1) : 'N/A'} / 5.0</div>
+            <span style="color:var(--brand-green-dark); font-weight:800; font-size:12px;">${c.CulinaryPerformancePoints || 0} pts</span>
+          </div>
+        </div>
+      `;
+    }).join("");
   }
 };

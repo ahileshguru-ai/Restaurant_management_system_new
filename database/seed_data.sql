@@ -41,15 +41,16 @@ INSERT INTO Tables (TableNumber, SeatingCapacity, CurrentStatus) VALUES
 -- 5. Menu Items (AssignedChefID links to specific chefs)
 -- Chef 3 (Vikram) specializes in South Indian & Curries
 -- Chef 4 (Meera) specializes in Biryani & Breads
-INSERT INTO Menu_Items (MenuItemID, ItemName, Category, Price, IsAvailable, AssignedChefID) VALUES
-(1, 'Crispy Masala Dosa', 'South Indian', 130.00, 1, 3),
-(2, 'Ghee Roast Dosa', 'South Indian', 160.00, 1, 3),
-(3, 'Medu Vada (2 Pcs)', 'South Indian', 90.00, 1, 3),
-(4, 'Hyderabadi Chicken Biryani', 'Biryani', 290.00, 1, 4),
-(5, 'Royal Mutton Biryani', 'Biryani', 360.00, 1, 4),
-(6, 'Paneer Butter Masala', 'Curries', 240.00, 1, 3),
-(7, 'Dal Makhani Slow-Cooked', 'Curries', 210.00, 1, 4),
-(8, 'Butter Garlic Naan', 'Breads', 65.00, 1, 4);
+INSERT INTO Menu_Items (MenuItemID, ItemName, Category, Price, StockQuantity, IsAvailable, AssignedChefID) VALUES
+(1, 'Crispy Masala Dosa', 'South Indian', 130.00, 15, 1, 3),
+(2, 'Ghee Roast Dosa', 'South Indian', 160.00, 12, 1, 3),
+(3, 'Medu Vada (2 Pcs)', 'South Indian', 90.00, 10, 1, 3),
+(4, 'Hyderabadi Chicken Biryani', 'Biryani', 290.00, 20, 1, 4),
+(5, 'Royal Mutton Biryani', 'Biryani', 360.00, 15, 1, 4),
+(6, 'Paneer Butter Masala', 'Curries', 240.00, 12, 1, 3),
+(7, 'Dal Makhani Slow-Cooked', 'Curries', 210.00, 14, 1, 4),
+(8, 'Butter Garlic Naan', 'Breads', 65.00, 25, 1, 4),
+(9, 'Steamed Idly (2 Pcs)', 'South Indian', 70.00, 10, 1, 3);
 
 -- 6. Inventory (AssignedChefID: 3 = Chef Vikram [South Indian/Curries], 4 = Chef Meera [Biryani/Breads])
 INSERT INTO Inventory (IngredientID, IngredientName, NeedsRestock, AssignedChefID, ReportedBy_ChefID, LastUpdated) VALUES
@@ -113,11 +114,7 @@ INSERT INTO Feedback (FeedbackID, OrderID, CustomerName, PhoneNumber, ServiceRat
 (3, 3, 'Karthik Raja', '9845012345', 5, 5, 5, 5, 'Biryani was royal and flavourful. Exceptional dining experience for family!'),
 (4, 4, 'Divya Iyer', '9870098700', 4, 4, 4, 4, 'Quick evening dinner. Priya attended our table with great hospitality.');
 
--- 13. Waste_Log
-INSERT INTO Waste_Log (WasteID, OrderDetailID, IngredientCost, LogTimestamp) VALUES
-(1, 5, 35.00, '2026-10-10 14:15:00');
-
--- 14. Purchase_Expenses
+-- 13. Purchase_Expenses
 INSERT INTO Purchase_Expenses (ExpenseID, ExpenseDate, ExpenseAmount, ExpenseType, Description) VALUES
 (1, '2026-09-05', 45000.00, 'Raw Materials', 'Bulk Grains, Dosa Batter & Dairy Procurement'),
 (2, '2026-09-28', 120000.00, 'Payroll', 'September Month Staff Salary & Benefits Disbursement'),
@@ -125,3 +122,7 @@ INSERT INTO Purchase_Expenses (ExpenseID, ExpenseDate, ExpenseAmount, ExpenseTyp
 (4, '2026-10-02', 38000.00, 'Raw Materials', 'Fresh Vegetables & Whole Spices Delivery'),
 (5, '2026-10-08', 22000.00, 'Raw Materials', 'Weekly Poultry & Dairy Farm Supplies'),
 (6, '2026-10-10', 120000.00, 'Payroll', 'October Month Staff Salary & Benefits Disbursement');
+
+-- 14. Waste_Log (Automatically triggers synchronized entry in Purchase_Expenses with description 'wastelog')
+INSERT INTO Waste_Log (WasteID, OrderDetailID, IngredientCost, LogTimestamp) VALUES
+(1, 5, 35.00, '2026-10-10 14:15:00');

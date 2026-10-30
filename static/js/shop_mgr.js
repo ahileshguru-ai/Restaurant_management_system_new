@@ -157,15 +157,17 @@ const ShopMgrModule = {
       return;
     }
 
-    tableBody.innerHTML = this.chefLeaderboard.map((c, idx) => `
-      <tr>
-        <td><strong>#${idx + 1}</strong></td>
-        <td><strong>${c.ChefName}</strong></td>
-        <td>${c.TotalDishesPrepared}</td>
-        <td>⭐ ${c.AvgFoodRating ? c.AvgFoodRating.toFixed(2) : 'N/A'}</td>
-        <td><strong style="color:var(--brand-green-dark);">${c.CulinaryPerformancePoints} pts</strong></td>
-      </tr>
-    `).join("");
+    tableBody.innerHTML = this.chefLeaderboard.map((c, idx) => {
+      return `
+        <tr>
+          <td><strong>#${idx + 1}</strong></td>
+          <td><strong>${c.ChefName}</strong></td>
+          <td>${c.TotalDishesPrepared}</td>
+          <td>⭐ ${c.AvgFoodRating ? c.AvgFoodRating.toFixed(2) : 'N/A'}</td>
+          <td><strong style="color:var(--brand-green-dark);">${c.CulinaryPerformancePoints} pts</strong></td>
+        </tr>
+      `;
+    }).join("");
   },
 
   renderDailyCollections() {
@@ -298,22 +300,26 @@ const ShopMgrModule = {
       return;
     }
 
-    container.innerHTML = expenses.map(e => `
+    container.innerHTML = expenses.map(e => {
+      const isWastelog = (e.Description && e.Description.toLowerCase() === 'wastelog');
+      return `
       <div style="display:flex; justify-content:space-between; align-items:flex-start; padding:10px 0; border-bottom:1px solid #F1F5F9; font-size:12px;">
         <div style="flex:1; padding-right:12px;">
           <div style="display:flex; align-items:center; gap:8px;">
             <span style="font-weight:700;">${e.ExpenseType}</span>
             <span class="bubble-badge badge-gray" style="font-size:10px; padding:2px 8px;">${e.ExpenseDate}</span>
+            ${isWastelog ? '<span class="bubble-badge badge-red" style="font-size:9px; padding:1px 6px;">WASTE LOG</span>' : ''}
           </div>
           ${e.Description ? `
             <div style="font-size:11px; color:var(--text-secondary); margin-top:3px; line-height:1.4;">
-              📝 ${e.Description}
+              ${isWastelog ? '🗑️' : '📝'} ${e.Description}
             </div>
           ` : ''}
         </div>
         <strong style="color:#B91C1C; white-space:nowrap; font-size:13px;">-Rs.${e.ExpenseAmount.toLocaleString('en-IN', {minimumFractionDigits: 2})}</strong>
       </div>
-    `).join("");
+    `;
+    }).join("");
   },
 
   renderFeedbacks(feedbacks) {

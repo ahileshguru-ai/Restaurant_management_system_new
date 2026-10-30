@@ -51,10 +51,12 @@ CREATE TABLE Menu_Items (
     ItemName VARCHAR(100) NOT NULL,
     Category VARCHAR(50) NOT NULL,
     Price NUMERIC(10,2) NOT NULL,
+    StockQuantity INT NOT NULL DEFAULT 10,
     IsAvailable BOOLEAN DEFAULT TRUE NOT NULL,
     AssignedChefID INT NOT NULL,
     IsActive BOOLEAN DEFAULT TRUE NOT NULL,
     CONSTRAINT chk_menu_price CHECK (Price > 0),
+    CONSTRAINT chk_menu_stock CHECK (StockQuantity >= 0),
     CONSTRAINT fk_menu_chef FOREIGN KEY (AssignedChefID) REFERENCES Staff(EmployeeID)
 );
 
@@ -213,7 +215,9 @@ SELECT
     s.Name AS ChefName,
     COALESCE(SUM(od.Quantity), 0) AS TotalDishesPrepared,
     ROUND(AVG(f.FoodRating), 2) AS AvgFoodRating,
-    ROUND(COALESCE(SUM(od.Quantity), 0) * COALESCE(AVG(f.FoodRating), 0), 2) AS CulinaryPerformancePoints
+    ROUND(
+        COALESCE(SUM(od.Quantity), 0) * COALESCE(AVG(f.FoodRating), 0), 2
+    ) AS CulinaryPerformancePoints
 FROM Staff s
 JOIN Order_Details od ON s.EmployeeID = od.PreparedBy_EmployeeID
 JOIN Orders o ON od.OrderID = o.OrderID
@@ -268,8 +272,8 @@ BEGIN
         END IF;
         RETURN OLD;
     ELSIF TG_OP = 'UPDATE' THEN
-        IF OLD.ItemStatus != 'Pending' AND (OLD.MenuItemID != NEW.MenuItemID OR OLD.Quantity != NEW.Quantity OR OLD.UnitPrice != NEW.UnitPrice) THEN
-            RAISE EXCEPTION 'Pre-Cooking Edit Block: Cannot modify dish, quantity, or unit price once status moves past Pending.';
+        IF OLD.ItemStatus != 'Pending' AND (OLD.MenuItemID != NEW.MenuItemID OR OLD.UnitPrice != NEW.UnitPrice OR NEW.Quantity > OLD.Quantity) THEN
+            RAISE EXCEPTION 'Pre-Cooking Edit Block: Cannot modify dish, unit price, or increase quantity once status moves past Pending.';
         END IF;
         RETURN NEW;
     END IF;
@@ -281,3 +285,23 @@ CREATE TRIGGER trg_precooking_edit_block
 BEFORE UPDATE OR DELETE ON Order_Details
 FOR EACH ROW
 EXECUTE FUNCTION fn_block_precooking_edit();
+
+-- =====================================================================
+-- SECTION G: Automated Waste Log to Expenses Synchronization Trigger
+-- =====================================================================
+
+CREATE OR REPLACE FUNCTION fn_sync_wastelog_to_expenses()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.IngredientCost > 0 THEN
+        INSERT INTO Purchase_Expenses (ExpenseDate, ExpenseAmount, ExpenseType, Description)
+        VALUES (CURRENT_DATE, NEW.IngredientCost, 'Raw Materials', 'wastelog');
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_sync_wastelog_to_expenses
+AFTER INSERT ON Waste_Log
+FOR EACH ROW
+EXECUTE FUNCTION fn_sync_wastelog_to_expenses();

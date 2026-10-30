@@ -118,8 +118,10 @@ When an executive manager departs, execute an atomic transaction:
    - `ItemName` (VARCHAR(100), NOT NULL)
    - `Category` (VARCHAR(50), NOT NULL)
    - `Price` (DECIMAL(10,2), NOT NULL, CHECK (Price > 0))
+   - `StockQuantity` (INT, DEFAULT 10, NOT NULL, CHECK (StockQuantity >= 0))
    - `IsAvailable` (BOOLEAN, DEFAULT TRUE, NOT NULL)
    - `AssignedChefID` (INT, NOT NULL, FK → `Staff.EmployeeID`)
+   - `IsActive` (BOOLEAN, DEFAULT TRUE, NOT NULL)
 5. **Inventory**
    - `IngredientID` (INT, PK, AUTO_INCREMENT)
    - `IngredientName` (VARCHAR(100), NOT NULL)
@@ -226,27 +228,59 @@ BEGIN
 END;
 ```
 
-### 4.2 Cancellation-Consent Flow
-```
-[Customer Requests Removal]
-           │
-           ▼
-[Waiter Updates Order_Details: ItemStatus = 'Cancel Requested']
-           │
-           ▼
-    [Chef Review on KDS]
-    ├── (Approved: Not started) ──> ItemStatus = 'Cancelled' ──> Push ingredient cost to Waste_Log
-    └── (Denied: Already prepared) ──> ItemStatus = 'Cooking'/'Ready' ──> Retained on Bill
-```
+### 4.2 Waiter Cancellation Architecture & Waste Log Rules
+Waiters have authoritative cancellation controls for both individual dishes and entire orders:
+
+1. **Individual Dish & Partial Quantity Cancellation**:
+   - When a waiter cancels a dish, they specify the number of portions to cancel (e.g. cancelling 1 Biryani out of 15).
+   - **Before Cooking** (`Pending` / `Cancel Requested`): The cancelled portions are restored to `Menu_Items.StockQuantity`. Does **NOT** go to `Waste_Log`.
+   - **During or After Cooking** (`Cooking` / `Ready`): ONLY the cancelled portions are logged to `Waste_Log` with estimated raw ingredient cost (~80% of cancelled subtotal). Any uncancelled portions continue preparation normally.
+
+2. **Entire Order Cancellation**:
+   - Dishes in `Pending` status are cancelled without being sent to `Waste_Log`.
+   - Dishes in `Cooking` or `Ready` status are cancelled and alone sent to `Waste_Log`.
+   - `Orders.OrderStatus` transitions to `'Cancelled'`.
+   - Assigned floor tables are released back to `'Available'`.
+
+3. **Automated Synchronization into Expenses List**:
+   - Every `Waste_Log` entry triggers an atomic insert into `Purchase_Expenses` via database trigger `trg_sync_wastelog_to_expenses`.
+   - The expense is recorded with `ExpenseType = 'Raw Materials'`, `ExpenseDate = DATE(LogTimestamp)`, `ExpenseAmount = IngredientCost`, and `Description = 'wastelog'`.
+   - In the Shop Manager's login, these wastelog entries appear in the Operating Expense Register and are included in total expenses for computing Net Profit / Loss and Monthly Fiscal Reports.
+
+*Note: Chefs cannot cancel orders directly. Waiters handle customer cancellations, specifying exact portion quantities.*
 
 ### 4.3 Out-of-Stock Atomic Transaction
-The FastAPI layer wraps menu outages in an atomic ACID transaction that simultaneously executes dish availability toggling and shortage logging:
+The FastAPI layer wraps menu outages in an atomic ACID transaction that simultaneously sets stock to zero, executes dish availability toggling, and records shortage logging:
 ```sql
 BEGIN TRANSACTION;
-UPDATE Menu_Items SET IsAvailable = FALSE WHERE MenuItemID = :item_id;
+UPDATE Menu_Items SET StockQuantity = 0, IsAvailable = FALSE WHERE MenuItemID = :item_id;
 INSERT INTO Shortage_Logs (MenuItemID, ChefID, Reason) VALUES (:item_id, :chef_id, :reason);
 COMMIT;
 ```
+
+### 4.4 Dynamic Portion Stock Inventory & Auto-OOS Thresholds
+Instead of a static binary available/out-of-stock toggle, every menu item maintains an explicit non-negative portion inventory (`Menu_Items.StockQuantity`):
+1. **Advance Preparation Entry**:
+   - The chef enters the exact number of portions prepared in advance (e.g., 10 idlys) via `PUT /api/chef/menu/{item_id}/stock`.
+   - The chef can alter the stock quantity at any time, even while in stock (e.g. preparing 10 additional portions elevates stock from 8 to 18).
+2. **Advance Waiter Visibility**:
+   - The waiter's menu list dynamically presents the real-time number of portions remaining for each dish before taking guest orders.
+   - Waiters are prevented at both UI and ACID transaction levels from dispatching orders that exceed available stock.
+3. **Atomic Decrement & Auto Out-of-Stock**:
+   - When an order is dispatched or a dish is added to an existing order, the stock decrements atomically:
+     ```sql
+     UPDATE Menu_Items
+     SET StockQuantity = StockQuantity - :qty,
+         IsAvailable = CASE WHEN StockQuantity - :qty <= 0 THEN 0 ELSE 1 END
+     WHERE MenuItemID = :item_id;
+     ```
+   - When portion stock reaches 0, the dish automatically transitions to `IsAvailable = 0` (Out of Stock), immediately blocking further orders across all floor terminals.
+4. **Replenishment & Availability Restoration**:
+   - When the chef prepares a new batch of food, entering a newly available quantity (e.g., 15) automatically restores the dish to `IsAvailable = 1` (In Stock).
+5. **Pre-Cooking Cancellation Restitution**:
+   - If a waiter cancels a dish *before cooking* (`Pending` / `Cancel Requested`), the reserved portion count is automatically restored back to `Menu_Items.StockQuantity` and `IsAvailable` is reset to 1.
+   - If cancelled *during or after cooking*, the food is discarded to `Waste_Log` and cannot be returned to ready stock.
+
 
 ---
 
@@ -270,7 +304,7 @@ GROUP BY s.EmployeeID, s.Name;
 ```
 
 ### 5.2 Chef Performance Leaderboard
-Ranks culinary output using `SUM(Quantity) * AVG(FoodRating)` grouped by `PreparedBy_EmployeeID`:
+Ranks culinary output using `Dishes Prepared × Avg Food Rating` grouped by `PreparedBy_EmployeeID`:
 ```sql
 CREATE VIEW View_Chef_Performance AS
 SELECT
@@ -278,7 +312,9 @@ SELECT
     s.Name AS ChefName,
     COALESCE(SUM(od.Quantity), 0) AS TotalDishesPrepared,
     ROUND(AVG(f.FoodRating), 2) AS AvgFoodRating,
-    ROUND(COALESCE(SUM(od.Quantity), 0) * COALESCE(AVG(f.FoodRating), 0), 2) AS CulinaryPerformancePoints
+    ROUND(
+        COALESCE(SUM(od.Quantity), 0) * COALESCE(AVG(f.FoodRating), 0), 2
+    ) AS CulinaryPerformancePoints
 FROM Staff s
 JOIN Order_Details od ON s.EmployeeID = od.PreparedBy_EmployeeID
 JOIN Orders o ON od.OrderID = o.OrderID

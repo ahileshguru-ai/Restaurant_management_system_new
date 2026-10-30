@@ -51,10 +51,12 @@ CREATE TABLE Menu_Items (
     ItemName VARCHAR(100) NOT NULL,
     Category VARCHAR(50) NOT NULL,
     Price DECIMAL(10,2) NOT NULL,
+    StockQuantity INT NOT NULL DEFAULT 10,
     IsAvailable BOOLEAN DEFAULT TRUE NOT NULL,
     AssignedChefID INT NOT NULL,
     IsActive BOOLEAN DEFAULT TRUE NOT NULL,
     CONSTRAINT chk_menu_price CHECK (Price > 0),
+    CONSTRAINT chk_menu_stock CHECK (StockQuantity >= 0),
     CONSTRAINT fk_menu_chef FOREIGN KEY (AssignedChefID) REFERENCES Staff(EmployeeID)
 ) ENGINE=InnoDB;
 
@@ -213,7 +215,9 @@ SELECT
     s.Name AS ChefName,
     COALESCE(SUM(od.Quantity), 0) AS TotalDishesPrepared,
     ROUND(AVG(f.FoodRating), 2) AS AvgFoodRating,
-    ROUND(COALESCE(SUM(od.Quantity), 0) * COALESCE(AVG(f.FoodRating), 0), 2) AS CulinaryPerformancePoints
+    ROUND(
+        COALESCE(SUM(od.Quantity), 0) * COALESCE(AVG(f.FoodRating), 0), 2
+    ) AS CulinaryPerformancePoints
 FROM Staff s
 JOIN Order_Details od ON s.EmployeeID = od.PreparedBy_EmployeeID
 JOIN Orders o ON od.OrderID = o.OrderID
@@ -275,9 +279,23 @@ CREATE TRIGGER trg_block_order_detail_update
 BEFORE UPDATE ON Order_Details
 FOR EACH ROW
 BEGIN
-    IF OLD.ItemStatus != 'Pending' AND (OLD.MenuItemID != NEW.MenuItemID OR OLD.Quantity != NEW.Quantity OR OLD.UnitPrice != NEW.UnitPrice) THEN
+    IF OLD.ItemStatus != 'Pending' AND (OLD.MenuItemID != NEW.MenuItemID OR OLD.UnitPrice != NEW.UnitPrice OR NEW.Quantity > OLD.Quantity) THEN
         SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Pre-Cooking Edit Block: Cannot modify dish, quantity, or unit price once status moves past Pending.';
+        SET MESSAGE_TEXT = 'Pre-Cooking Edit Block: Cannot modify dish, unit price, or increase quantity once status moves past Pending.';
+    END IF;
+END$$
+
+-- =====================================================================
+-- SECTION G: Automated Waste Log to Expenses Synchronization Trigger
+-- =====================================================================
+
+CREATE TRIGGER trg_sync_wastelog_to_expenses
+AFTER INSERT ON Waste_Log
+FOR EACH ROW
+BEGIN
+    IF NEW.IngredientCost > 0 THEN
+        INSERT INTO Purchase_Expenses (ExpenseDate, ExpenseAmount, ExpenseType, Description)
+        VALUES (CURDATE(), NEW.IngredientCost, 'Raw Materials', 'wastelog');
     END IF;
 END$$
 

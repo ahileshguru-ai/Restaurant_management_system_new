@@ -93,7 +93,7 @@ This project implements a complete **3-Tier Layered Architecture** strictly conf
 | 1 | `Roles` | Core | `RoleID` (PK), `RoleName` (UNIQUE) | Ferraiolo-Kuhn role definitions |
 | 2 | `Staff` | Core | `EmployeeID` (PK), `RoleID` (FK), `Salary` (CHECK >= 0) | Personnel records and active/retired status |
 | 3 | `Users` | Core | `UserID` (PK), `EmployeeID` (FK, UNIQUE), `Username` (UNIQUE) | Decoupled bcrypt credentials |
-| 4 | `Menu_Items` | Core | `MenuItemID` (PK), `AssignedChefID` (FK), `Price` (CHECK > 0) | Dish catalog and chef station routing |
+| 4 | `Menu_Items` | Core | `MenuItemID` (PK), `AssignedChefID` (FK), `Price` (CHECK > 0), `StockQuantity` (CHECK >= 0) | Dish catalog, numerical stock, and chef routing |
 | 5 | `Inventory` | Core | `IngredientID` (PK), `ReportedBy_ChefID` (FK) | Raw material restock monitoring |
 | 6 | `Shortage_Logs` | Core | `LogID` (PK), `MenuItemID` (FK), `ChefID` (FK) | Out-of-stock atomic incident audits |
 | 7 | `Menu_Requests` | Bridge | `RequestID` (PK), `ChefID` (FK), `RequestType` (CHECK) | Chef proposals for add/remove dishes |
@@ -145,7 +145,9 @@ SELECT
     s.Name AS ChefName,
     COALESCE(SUM(od.Quantity), 0) AS TotalDishesPrepared,
     ROUND(AVG(f.FoodRating), 2) AS AvgFoodRating,
-    ROUND(COALESCE(SUM(od.Quantity), 0) * COALESCE(AVG(f.FoodRating), 0), 2) AS CulinaryPerformancePoints
+    ROUND(
+        COALESCE(SUM(od.Quantity), 0) * COALESCE(AVG(f.FoodRating), 0), 2
+    ) AS CulinaryPerformancePoints
 FROM Staff s
 JOIN Order_Details od ON s.EmployeeID = od.PreparedBy_EmployeeID
 JOIN Orders o ON od.OrderID = o.OrderID
@@ -205,7 +207,19 @@ A `BEFORE UPDATE OR DELETE` database trigger on `Order_Details` physically block
 
 ---
 
-## 5. Single-Seat Administrative Handover Protocol
+## 5. Dynamic Portion Stock Inventory & Auto-OOS Thresholds
+
+Instead of static binary available/out-of-stock flags:
+- **Chef Advance Stock Entry:** Chefs enter the quantity of dishes prepared in advance (e.g. 10 idlys) and can alter/increase the quantity at any time.
+- **Waiter Real-Time Visibility:** Waiters view the exact number of portions remaining for each dish before taking guest orders.
+- **Atomic Stock Decrement:** When an order is placed, stock decrements atomically (e.g., 10 -> 9).
+- **Auto Out-of-Stock:** When stock reaches 0, the dish automatically transitions to `IsAvailable = 0` (Out of Stock), disabling ordering on floor terminals.
+- **Replenishment:** Entering a new batch quantity restores `IsAvailable = 1` immediately.
+- **Pre-Cooking Recovery:** Cancelling an item before cooking (`Pending`) automatically restores the reserved portions to stock.
+
+---
+
+## 6. Single-Seat Administrative Handover Protocol
 
 When a Shop Manager or Kitchen Manager departs:
 1. **Hard DELETE** of the departing user's credentials from `Users`.

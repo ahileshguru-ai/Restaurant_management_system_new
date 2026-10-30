@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS Menu_Items (
     ItemName TEXT NOT NULL,
     Category TEXT NOT NULL,
     Price REAL NOT NULL CHECK (Price > 0),
+    StockQuantity INTEGER NOT NULL DEFAULT 10 CHECK (StockQuantity >= 0),
     IsAvailable INTEGER DEFAULT 1 NOT NULL CHECK (IsAvailable IN (0, 1)),
     AssignedChefID INTEGER NOT NULL,
     IsActive INTEGER DEFAULT 1 NOT NULL CHECK (IsActive IN (0, 1)),
@@ -195,7 +196,9 @@ SELECT
     s.Name AS ChefName,
     COALESCE(SUM(od.Quantity), 0) AS TotalDishesPrepared,
     ROUND(AVG(f.FoodRating), 2) AS AvgFoodRating,
-    ROUND(COALESCE(SUM(od.Quantity), 0) * COALESCE(AVG(f.FoodRating), 0), 2) AS CulinaryPerformancePoints
+    ROUND(
+        COALESCE(SUM(od.Quantity), 0) * COALESCE(AVG(f.FoodRating), 0), 2
+    ) AS CulinaryPerformancePoints
 FROM Staff s
 JOIN Order_Details od ON s.EmployeeID = od.PreparedBy_EmployeeID
 JOIN Orders o ON od.OrderID = o.OrderID
@@ -254,7 +257,20 @@ END;
 CREATE TRIGGER IF NOT EXISTS trg_block_order_detail_update
 BEFORE UPDATE ON Order_Details
 FOR EACH ROW
-WHEN OLD.ItemStatus != 'Pending' AND (OLD.MenuItemID != NEW.MenuItemID OR OLD.Quantity != NEW.Quantity OR OLD.UnitPrice != NEW.UnitPrice)
+WHEN OLD.ItemStatus != 'Pending' AND (OLD.MenuItemID != NEW.MenuItemID OR OLD.UnitPrice != NEW.UnitPrice OR NEW.Quantity > OLD.Quantity)
 BEGIN
-    SELECT RAISE(ABORT, 'Pre-Cooking Edit Block: Cannot modify dish, quantity, or unit price once status moves past Pending.');
+    SELECT RAISE(ABORT, 'Pre-Cooking Edit Block: Cannot modify dish, unit price, or increase quantity once status moves past Pending.');
+END;
+
+-- =====================================================================
+-- SECTION G: Automated Waste Log to Expenses Synchronization Trigger
+-- =====================================================================
+
+CREATE TRIGGER IF NOT EXISTS trg_sync_wastelog_to_expenses
+AFTER INSERT ON Waste_Log
+FOR EACH ROW
+WHEN NEW.IngredientCost > 0
+BEGIN
+    INSERT INTO Purchase_Expenses (ExpenseDate, ExpenseAmount, ExpenseType, Description)
+    VALUES (DATE(COALESCE(NEW.LogTimestamp, 'now')), NEW.IngredientCost, 'Raw Materials', 'wastelog');
 END;

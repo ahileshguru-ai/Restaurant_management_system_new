@@ -88,6 +88,15 @@ def init_db(force_reset: bool = False):
         cursor.execute("ALTER TABLE Menu_Items ADD COLUMN IsActive INTEGER DEFAULT 1 NOT NULL CHECK (IsActive IN (0, 1));")
         conn.commit()
 
+    # Ensure StockQuantity column exists on Menu_Items (dynamic portion-level inventory tracking)
+    cursor.execute("PRAGMA table_info(Menu_Items);")
+    item_cols_now = [c["name"] for c in cursor.fetchall()]
+    if "StockQuantity" not in item_cols_now:
+        cursor.execute("ALTER TABLE Menu_Items ADD COLUMN StockQuantity INTEGER NOT NULL DEFAULT 10 CHECK (StockQuantity >= 0);")
+        cursor.execute("UPDATE Menu_Items SET StockQuantity = 10 WHERE StockQuantity IS NULL;")
+        cursor.execute("UPDATE Menu_Items SET IsAvailable = CASE WHEN StockQuantity > 0 THEN 1 ELSE 0 END;")
+        conn.commit()
+
     # Ensure AssignedChefID column exists on Inventory (station-specific ingredient inventory)
     cursor.execute("PRAGMA table_info(Inventory);")
     inv_cols = [c["name"] for c in cursor.fetchall()]
@@ -111,6 +120,55 @@ def init_db(force_reset: bool = False):
         cursor.execute("UPDATE Purchase_Expenses SET Description = 'October Month Staff Salary & Benefits Disbursement' WHERE ExpenseID = 6;")
         cursor.execute("UPDATE Purchase_Expenses SET Description = 'Bulk Basmati Rice & Desi Ghee Procurement' WHERE ExpenseID = 7;")
         cursor.execute("UPDATE Purchase_Expenses SET Description = 'Dining Furniture & Lighting Maintenance' WHERE ExpenseID = 8;")
+        conn.commit()
+
+    # Ensure View_Chef_Performance and triggers are loaded
+    with open(SCHEMA_SQL_PATH, "r", encoding="utf-8") as f:
+        schema_script = f.read()
+    view_statements = [stmt.strip() for stmt in schema_script.split(";") if "CREATE VIEW" in stmt or "DROP VIEW" in stmt]
+    for stmt in view_statements:
+        if stmt:
+            conn.execute(stmt)
+
+    # Ensure pre-cooking edit block trigger allows quantity reduction for partial cancellation
+    cursor.execute("DROP TRIGGER IF EXISTS trg_block_order_detail_update;")
+    cursor.execute("""
+        CREATE TRIGGER IF NOT EXISTS trg_block_order_detail_update
+        BEFORE UPDATE ON Order_Details
+        FOR EACH ROW
+        WHEN OLD.ItemStatus != 'Pending' AND (OLD.MenuItemID != NEW.MenuItemID OR OLD.UnitPrice != NEW.UnitPrice OR NEW.Quantity > OLD.Quantity)
+        BEGIN
+            SELECT RAISE(ABORT, 'Pre-Cooking Edit Block: Cannot modify dish, unit price, or increase quantity once status moves past Pending.');
+        END;
+    """)
+    # Ensure automated trigger trg_sync_wastelog_to_expenses is active
+    cursor.execute("""
+        CREATE TRIGGER IF NOT EXISTS trg_sync_wastelog_to_expenses
+        AFTER INSERT ON Waste_Log
+        FOR EACH ROW
+        WHEN NEW.IngredientCost > 0
+        BEGIN
+            INSERT INTO Purchase_Expenses (ExpenseDate, ExpenseAmount, ExpenseType, Description)
+            VALUES (DATE(COALESCE(NEW.LogTimestamp, 'now')), NEW.IngredientCost, 'Raw Materials', 'wastelog');
+        END;
+    """)
+    conn.commit()
+
+    # Backfill any pre-existing Waste_Log rows into Purchase_Expenses (description 'wastelog')
+    cursor.execute("SELECT COUNT(*) FROM Purchase_Expenses WHERE Description = 'wastelog';")
+    existing_waste_exp_count = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM Waste_Log WHERE IngredientCost > 0;")
+    waste_log_count = cursor.fetchone()[0]
+
+    if existing_waste_exp_count < waste_log_count:
+        missing_count = waste_log_count - existing_waste_exp_count
+        cursor.execute("""
+            INSERT INTO Purchase_Expenses (ExpenseDate, ExpenseAmount, ExpenseType, Description)
+            SELECT DATE(COALESCE(wl.LogTimestamp, 'now')), wl.IngredientCost, 'Raw Materials', 'wastelog'
+            FROM Waste_Log wl
+            WHERE wl.IngredientCost > 0
+            LIMIT ?;
+        """, (missing_count,))
         conn.commit()
 
     conn.close()
@@ -193,11 +251,50 @@ def execute_handover_protocol(
         }
 
 
+def update_menu_item_stock(menu_item_id: int, stock_quantity: int, chef_id: Optional[int] = None) -> Dict[str, Any]:
+    """
+    Updates the available stock quantity for a menu item.
+    - Validates stock_quantity >= 0.
+    - If stock_quantity == 0, sets IsAvailable = 0 (automatically out of stock).
+    - If stock_quantity > 0, sets IsAvailable = 1 (automatically in stock).
+    - Can be altered by the chef at any time to replenish or adjust portions in advance.
+    """
+    if stock_quantity < 0:
+        raise ValueError("Stock quantity cannot be negative.")
+
+    with transaction() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT MenuItemID, ItemName, AssignedChefID, StockQuantity, IsAvailable FROM Menu_Items WHERE MenuItemID = ?;", (menu_item_id,))
+        item = cursor.fetchone()
+        if not item:
+            raise ValueError(f"MenuItemID {menu_item_id} not found.")
+
+        if chef_id is not None and item["AssignedChefID"] != chef_id:
+            raise PermissionError("You can only manage stock for dishes assigned to your culinary station.")
+
+        new_is_available = 1 if stock_quantity > 0 else 0
+        cursor.execute("""
+            UPDATE Menu_Items 
+            SET StockQuantity = ?, IsAvailable = ?
+            WHERE MenuItemID = ?;
+        """, (stock_quantity, new_is_available, menu_item_id))
+
+        return {
+            "status": "success",
+            "menu_item_id": menu_item_id,
+            "item_name": item["ItemName"],
+            "previous_stock": item["StockQuantity"],
+            "stock_quantity": stock_quantity,
+            "is_available": bool(new_is_available),
+            "message": f"Stock for '{item['ItemName']}' updated to {stock_quantity} portions (Status: {'IN STOCK' if new_is_available else 'OUT OF STOCK'})."
+        }
+
+
 def out_of_stock_atomic_transaction(menu_item_id: int, chef_id: int, shortage_reason: str) -> Dict[str, Any]:
     """
     4.3 Out-of-Stock Atomic Transaction (Page 6 of Constraints):
     BEGIN TRANSACTION;
-    UPDATE Menu_Items SET IsAvailable = FALSE WHERE MenuItemID = :item_id;
+    UPDATE Menu_Items SET StockQuantity = 0, IsAvailable = FALSE WHERE MenuItemID = :item_id;
     INSERT INTO Shortage_Logs (MenuItemID, ChefID, Reason) VALUES (:item_id, :chef_id, :shortage_reason);
     COMMIT;
     """
@@ -210,7 +307,7 @@ def out_of_stock_atomic_transaction(menu_item_id: int, chef_id: int, shortage_re
         if not item:
             raise ValueError(f"MenuItemID {menu_item_id} not found.")
 
-        cursor.execute("UPDATE Menu_Items SET IsAvailable = 0 WHERE MenuItemID = ?;", (menu_item_id,))
+        cursor.execute("UPDATE Menu_Items SET StockQuantity = 0, IsAvailable = 0 WHERE MenuItemID = ?;", (menu_item_id,))
         cursor.execute("""
             INSERT INTO Shortage_Logs (MenuItemID, ChefID, Reason, LogTimestamp)
             VALUES (?, ?, ?, CURRENT_TIMESTAMP);
@@ -279,10 +376,25 @@ def create_order_with_tables_and_items(
             if quantity <= 0:
                 raise ValueError("Item quantity must be greater than 0.")
 
-            cursor.execute("SELECT Price, AssignedChefID, ItemName FROM Menu_Items WHERE MenuItemID = ?;", (menu_item_id,))
+            cursor.execute("SELECT Price, AssignedChefID, ItemName, StockQuantity, IsAvailable FROM Menu_Items WHERE MenuItemID = ?;", (menu_item_id,))
             menu_row = cursor.fetchone()
             if not menu_row:
                 raise ValueError(f"MenuItemID {menu_item_id} not found.")
+
+            stock_qty = menu_row["StockQuantity"] if menu_row["StockQuantity"] is not None else 0
+            if not menu_row["IsAvailable"] or stock_qty <= 0:
+                raise ValueError(f"Dish '{menu_row['ItemName']}' is currently OUT OF STOCK.")
+
+            if quantity > stock_qty:
+                raise ValueError(f"Insufficient stock for '{menu_row['ItemName']}'. Only {stock_qty} portion(s) remaining in stock.")
+
+            # Decrement stock count and auto-flag out-of-stock when reaching 0
+            cursor.execute("""
+                UPDATE Menu_Items
+                SET StockQuantity = StockQuantity - ?,
+                    IsAvailable = CASE WHEN StockQuantity - ? <= 0 THEN 0 ELSE 1 END
+                WHERE MenuItemID = ?;
+            """, (quantity, quantity, menu_item_id))
 
             price = menu_row["Price"]
             assigned_chef_id = menu_row["AssignedChefID"]
@@ -330,10 +442,25 @@ def add_item_to_order(order_id: int, menu_item_id: int, quantity: int = 1) -> Di
         if order["OrderStatus"] != 'In Progress':
             raise ValueError(f"Cannot add items to order #{order_id} because it is '{order['OrderStatus']}'.")
 
-        cursor.execute("SELECT Price, AssignedChefID, ItemName FROM Menu_Items WHERE MenuItemID = ?;", (menu_item_id,))
+        cursor.execute("SELECT Price, AssignedChefID, ItemName, StockQuantity, IsAvailable FROM Menu_Items WHERE MenuItemID = ?;", (menu_item_id,))
         menu_row = cursor.fetchone()
         if not menu_row:
             raise ValueError(f"MenuItemID {menu_item_id} not found.")
+
+        stock_qty = menu_row["StockQuantity"] if menu_row["StockQuantity"] is not None else 0
+        if not menu_row["IsAvailable"] or stock_qty <= 0:
+            raise ValueError(f"Dish '{menu_row['ItemName']}' is currently OUT OF STOCK.")
+
+        if quantity > stock_qty:
+            raise ValueError(f"Insufficient stock for '{menu_row['ItemName']}'. Only {stock_qty} portion(s) remaining in stock.")
+
+        # Decrement stock count and auto-flag out-of-stock when reaching 0
+        cursor.execute("""
+            UPDATE Menu_Items
+            SET StockQuantity = StockQuantity - ?,
+                IsAvailable = CASE WHEN StockQuantity - ? <= 0 THEN 0 ELSE 1 END
+            WHERE MenuItemID = ?;
+        """, (quantity, quantity, menu_item_id))
 
         price = menu_row["Price"]
         subtotal = round(price * quantity, 2)
@@ -376,8 +503,8 @@ def chef_review_cancel_consent(order_detail_id: int, approved: bool) -> Dict[str
 
         if approved:
             new_status = 'Cancelled'
-            # Estimate raw ingredient waste cost (~40% of item subtotal)
-            ingredient_cost = round(od["Subtotal"] * 0.40, 2)
+            # Estimate raw ingredient waste cost (~80% of item subtotal)
+            ingredient_cost = round(od["Subtotal"] * 0.80, 2)
             cursor.execute("UPDATE Order_Details SET ItemStatus = ? WHERE OrderDetailID = ?;", (new_status, order_detail_id))
             cursor.execute("""
                 INSERT INTO Waste_Log (OrderDetailID, IngredientCost, LogTimestamp)
@@ -406,7 +533,7 @@ def chef_discard_order_item(order_detail_id: int, reason: str, chef_id: Optional
     """
     Direct Chef Food Discard / Cancellation Flow:
     1. Updates Order_Details: ItemStatus = 'Cancelled', CancellationReason = reason.
-    2. Calculates estimated raw ingredient waste cost (~40% of item subtotal).
+    2. Calculates estimated raw ingredient waste cost (~80% of item subtotal).
     3. Pushes entry into Waste_Log (OrderDetailID, IngredientCost, LogTimestamp).
     4. Dish is removed from Chef Live Production Queue and immediately reflected
        in the Kitchen Manager's Discarded Food & Waste Log.
@@ -428,9 +555,9 @@ def chef_discard_order_item(order_detail_id: int, reason: str, chef_id: Optional
         if od["ItemStatus"] == 'Cancelled':
             raise ValueError(f"Dish '{od['ItemName']}' is already cancelled.")
 
-        # Estimate raw ingredient waste cost (~40% of item subtotal)
+        # Estimate raw ingredient waste cost (~80% of item subtotal)
         subtotal = od["Subtotal"] if od["Subtotal"] and od["Subtotal"] > 0 else (od["Price"] * od["Quantity"])
-        ingredient_cost = round(subtotal * 0.40, 2)
+        ingredient_cost = round(subtotal * 0.80, 2)
 
         reason_clean = (reason or "").strip() or "Food discarded during cooking"
 
@@ -454,6 +581,326 @@ def chef_discard_order_item(order_detail_id: int, reason: str, chef_id: Optional
             "ingredient_cost": ingredient_cost,
             "waste_id": waste_id,
             "message": f"'{od['ItemName']}' cancelled & discarded. Loss Rs.{ingredient_cost:.2f} logged to Waste Log."
+        }
+
+
+def waiter_cancel_order_item(
+    order_detail_id: int,
+    reason: Optional[str] = None,
+    waiter_id: Optional[int] = None,
+    cancel_quantity: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    Waiter Food Item Cancellation Flow:
+    - Supports full cancellation or partial quantity cancellation (e.g. 1 out of 15 biriyanis).
+    - If cancelled BEFORE cooking ('Pending' / 'Cancel Requested'):
+      Cancelled portions are restored to stock inventory; does NOT go to Waste_Log.
+    - If cancelled DURING or AFTER cooking ('Cooking' / 'Ready'):
+      ONLY the cancelled portion goes to Waste_Log with raw ingredient cost (~80% of item subtotal).
+    - If all items in the order become cancelled, the order is automatically marked Cancelled and tables freed.
+    """
+    with transaction() as conn:
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT od.OrderDetailID, od.OrderID, od.MenuItemID, od.Subtotal, od.UnitPrice, od.Quantity,
+                   od.ItemStatus, od.PreparedBy_EmployeeID, m.ItemName, m.Price, o.OrderStatus, o.WaiterID
+            FROM Order_Details od
+            JOIN Menu_Items m ON od.MenuItemID = m.MenuItemID
+            JOIN Orders o ON od.OrderID = o.OrderID
+            WHERE od.OrderDetailID = ?;
+        """, (order_detail_id,))
+        od = cursor.fetchone()
+        if not od:
+            raise ValueError(f"OrderDetailID #{order_detail_id} not found.")
+
+        if od["OrderStatus"] != 'In Progress':
+            raise ValueError(f"Cannot cancel item because order #{od['OrderID']} is '{od['OrderStatus']}'.")
+
+        if waiter_id is not None and od["WaiterID"] != waiter_id:
+            raise PermissionError("You can only cancel items for orders assigned to your shift.")
+
+        if od["ItemStatus"] == 'Cancelled':
+            raise ValueError(f"Dish '{od['ItemName']}' is already cancelled.")
+
+        available_qty = od["Quantity"]
+        if cancel_quantity is None:
+            qty_to_cancel = available_qty
+        else:
+            try:
+                qty_to_cancel = int(cancel_quantity)
+            except (ValueError, TypeError):
+                raise ValueError("Cancel quantity must be a positive integer.")
+            if qty_to_cancel <= 0:
+                raise ValueError("Cancel quantity must be at least 1.")
+            if qty_to_cancel > available_qty:
+                raise ValueError(f"Cannot cancel {qty_to_cancel} portions; only {available_qty} portion(s) available in this dish.")
+
+        unit_price = od["UnitPrice"] if od["UnitPrice"] is not None and od["UnitPrice"] > 0 else od["Price"]
+        logged_to_waste = False
+        waste_id = None
+        ingredient_cost = 0.0
+
+        if qty_to_cancel == available_qty:
+            # Full item cancellation
+            cancelled_detail_id = order_detail_id
+            remaining_qty = 0
+
+            if od["ItemStatus"] in ('Cooking', 'Ready'):
+                # During or after cooking: log full dish to Waste_Log
+                subtotal = round(unit_price * qty_to_cancel, 2)
+                ingredient_cost = round(subtotal * 0.80, 2)
+                logged_to_waste = True
+                cancellation_reason = reason.strip() if (reason and reason.strip()) else f"Cancelled by waiter during/after cooking ({od['ItemStatus']})"
+
+                cursor.execute("""
+                    UPDATE Order_Details
+                    SET ItemStatus = 'Cancelled', CancellationReason = ?
+                    WHERE OrderDetailID = ?;
+                """, (cancellation_reason, order_detail_id))
+
+                cursor.execute("""
+                    INSERT INTO Waste_Log (OrderDetailID, IngredientCost, LogTimestamp)
+                    VALUES (?, ?, CURRENT_TIMESTAMP);
+                """, (order_detail_id, ingredient_cost))
+                waste_id = cursor.lastrowid
+                msg = f"'{od['ItemName']}' ({qty_to_cancel} portion(s)) cancelled during/after cooking ({od['ItemStatus']}). Discard logged to Waste Log (loss Rs.{ingredient_cost:.2f})."
+            else:
+                # Before cooking: restore all portions to stock
+                cursor.execute("""
+                    UPDATE Menu_Items
+                    SET StockQuantity = StockQuantity + ?,
+                        IsAvailable = 1
+                    WHERE MenuItemID = ?;
+                """, (qty_to_cancel, od["MenuItemID"]))
+
+                cancellation_reason = reason.strip() if (reason and reason.strip()) else "Cancelled by waiter before cooking"
+                cursor.execute("""
+                    UPDATE Order_Details
+                    SET ItemStatus = 'Cancelled', CancellationReason = ?
+                    WHERE OrderDetailID = ?;
+                """, (cancellation_reason, order_detail_id))
+                msg = f"'{od['ItemName']}' ({qty_to_cancel} portion(s)) cancelled before cooking. Restored {qty_to_cancel} portion(s) to stock. Not logged to Waste Log."
+        else:
+            # Partial cancellation (e.g. 1 out of 15)
+            remaining_qty = available_qty - qty_to_cancel
+            remaining_subtotal = round(unit_price * remaining_qty, 2)
+            cancelled_subtotal = round(unit_price * qty_to_cancel, 2)
+
+            # 1. Update the existing row to reflect the remaining portion(s)
+            cursor.execute("""
+                UPDATE Order_Details
+                SET Quantity = ?, Subtotal = ?
+                WHERE OrderDetailID = ?;
+            """, (remaining_qty, remaining_subtotal, order_detail_id))
+
+            cancellation_reason = reason.strip() if (reason and reason.strip()) else f"Cancelled {qty_to_cancel} portion(s) by waiter ({od['ItemStatus']})"
+
+            # 2. Insert a new row representing only the cancelled portion(s)
+            cursor.execute("""
+                INSERT INTO Order_Details (
+                    OrderID, MenuItemID, Quantity, UnitPrice, Subtotal,
+                    PreparedBy_EmployeeID, ItemStatus, CancellationReason
+                ) VALUES (?, ?, ?, ?, ?, ?, 'Cancelled', ?);
+            """, (
+                od["OrderID"],
+                od["MenuItemID"],
+                qty_to_cancel,
+                unit_price,
+                cancelled_subtotal,
+                od["PreparedBy_EmployeeID"],
+                cancellation_reason
+            ))
+            cancelled_detail_id = cursor.lastrowid
+
+            if od["ItemStatus"] in ('Cooking', 'Ready'):
+                # ONLY the cancelled portion goes to Waste_Log
+                ingredient_cost = round(cancelled_subtotal * 0.80, 2)
+                logged_to_waste = True
+                cursor.execute("""
+                    INSERT INTO Waste_Log (OrderDetailID, IngredientCost, LogTimestamp)
+                    VALUES (?, ?, CURRENT_TIMESTAMP);
+                """, (cancelled_detail_id, ingredient_cost))
+                waste_id = cursor.lastrowid
+                msg = (f"Cancelled {qty_to_cancel} of {available_qty} '{od['ItemName']}' during/after cooking ({od['ItemStatus']}). "
+                       f"Only cancelled portion logged to Waste Log (loss Rs.{ingredient_cost:.2f}). "
+                       f"Remaining {remaining_qty} portion(s) continue preparation.")
+            else:
+                # Before cooking: restore only the cancelled portion(s) to stock
+                cursor.execute("""
+                    UPDATE Menu_Items
+                    SET StockQuantity = StockQuantity + ?,
+                        IsAvailable = 1
+                    WHERE MenuItemID = ?;
+                """, (qty_to_cancel, od["MenuItemID"]))
+                msg = (f"Cancelled {qty_to_cancel} of {available_qty} '{od['ItemName']}' before cooking. "
+                       f"Restored {qty_to_cancel} portion(s) to stock. Not logged to Waste Log. "
+                       f"Remaining {remaining_qty} portion(s) remain on ticket.")
+
+        # Check if all items in this order are now cancelled
+        cursor.execute("""
+            SELECT COUNT(*) AS active_count
+            FROM Order_Details
+            WHERE OrderID = ? AND ItemStatus != 'Cancelled';
+        """, (od["OrderID"],))
+        rem = cursor.fetchone()
+        active_remaining = rem["active_count"] if rem else 0
+        order_auto_cancelled = False
+
+        if active_remaining == 0:
+            cursor.execute("UPDATE Orders SET OrderStatus = 'Cancelled' WHERE OrderID = ?;", (od["OrderID"],))
+            # Free tables
+            cursor.execute("SELECT TableNumber FROM Order_Tables WHERE OrderID = ?;", (od["OrderID"],))
+            for t in cursor.fetchall():
+                cursor.execute("""
+                    SELECT COUNT(*) as cnt FROM Order_Tables ot
+                    JOIN Orders o ON ot.OrderID = o.OrderID
+                    WHERE ot.TableNumber = ? AND o.OrderID != ? AND o.OrderStatus = 'In Progress';
+                """, (t["TableNumber"], od["OrderID"]))
+                if cursor.fetchone()["cnt"] == 0:
+                    cursor.execute("UPDATE Tables SET CurrentStatus = 'Available' WHERE TableNumber = ?;", (t["TableNumber"],))
+            order_auto_cancelled = True
+            msg += f" All items cancelled; Order #{od['OrderID']} marked Cancelled and tables freed."
+
+        return {
+            "status": "success",
+            "order_detail_id": order_detail_id,
+            "cancelled_detail_id": cancelled_detail_id,
+            "order_id": od["OrderID"],
+            "item_name": od["ItemName"],
+            "status_before": od["ItemStatus"],
+            "cancelled_quantity": qty_to_cancel,
+            "remaining_quantity": remaining_qty,
+            "new_status": "Cancelled",
+            "logged_to_waste": logged_to_waste,
+            "ingredient_cost": ingredient_cost,
+            "waste_id": waste_id,
+            "order_cancelled": order_auto_cancelled,
+            "message": msg
+        }
+
+
+def waiter_cancel_order(order_id: int, reason: Optional[str] = None, waiter_id: Optional[int] = None) -> Dict[str, Any]:
+    """
+    Waiter Entire Order Cancellation Flow:
+    - If an entire order is cancelled:
+      * Dishes during or after cooking ('Cooking', 'Ready') alone go to Waste_Log.
+      * Dishes before cooking ('Pending') do NOT go to Waste_Log.
+      * Order status transitions to 'Cancelled'.
+      * Assigned floor tables are freed back to 'Available'.
+    """
+    with transaction() as conn:
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT OrderID, WaiterID, OrderStatus FROM Orders WHERE OrderID = ?;", (order_id,))
+        order = cursor.fetchone()
+        if not order:
+            raise ValueError(f"Order #{order_id} not found.")
+
+        if order["OrderStatus"] != 'In Progress':
+            raise ValueError(f"Cannot cancel order #{order_id} because it is '{order['OrderStatus']}'.")
+
+        if waiter_id is not None and order["WaiterID"] != waiter_id:
+            raise PermissionError("You can only cancel orders assigned to your shift.")
+
+        cursor.execute("""
+            SELECT od.OrderDetailID, od.MenuItemID, m.ItemName, od.Quantity, od.UnitPrice, od.Subtotal, od.ItemStatus
+            FROM Order_Details od
+            JOIN Menu_Items m ON od.MenuItemID = m.MenuItemID
+            WHERE od.OrderID = ?;
+        """, (order_id,))
+        items = cursor.fetchall()
+
+        wasted_items = []
+        non_wasted_items = []
+        total_waste_cost = 0.0
+
+        for it in items:
+            if it["ItemStatus"] == 'Cancelled':
+                continue
+
+            subtotal = it["Subtotal"] if it["Subtotal"] and it["Subtotal"] > 0 else (it["UnitPrice"] * it["Quantity"])
+
+            if it["ItemStatus"] in ('Cooking', 'Ready'):
+                # During or after cooking: goes to Waste_Log
+                cost = round(subtotal * 0.80, 2)
+                item_reason = f"Order #{order_id} cancelled by waiter - dish was {it['ItemStatus']}"
+                if reason and reason.strip():
+                    item_reason += f" ({reason.strip()})"
+
+                cursor.execute("""
+                    UPDATE Order_Details
+                    SET ItemStatus = 'Cancelled', CancellationReason = ?
+                    WHERE OrderDetailID = ?;
+                """, (item_reason, it["OrderDetailID"]))
+
+                cursor.execute("""
+                    INSERT INTO Waste_Log (OrderDetailID, IngredientCost, LogTimestamp)
+                    VALUES (?, ?, CURRENT_TIMESTAMP);
+                """, (it["OrderDetailID"], cost))
+                waste_id = cursor.lastrowid
+
+                wasted_items.append({
+                    "order_detail_id": it["OrderDetailID"],
+                    "item_name": it["ItemName"],
+                    "status_before": it["ItemStatus"],
+                    "ingredient_cost": cost,
+                    "waste_id": waste_id
+                })
+                total_waste_cost += cost
+            else:
+                # Before cooking (Pending, etc.): does NOT go to Waste_Log
+                # Restore stock quantity back to Menu_Items catalog
+                cursor.execute("""
+                    UPDATE Menu_Items
+                    SET StockQuantity = StockQuantity + ?,
+                        IsAvailable = 1
+                    WHERE MenuItemID = ?;
+                """, (it["Quantity"], it["MenuItemID"]))
+
+                item_reason = f"Order #{order_id} cancelled by waiter - dish before cooking"
+                if reason and reason.strip():
+                    item_reason += f" ({reason.strip()})"
+
+                cursor.execute("""
+                    UPDATE Order_Details
+                    SET ItemStatus = 'Cancelled', CancellationReason = ?
+                    WHERE OrderDetailID = ?;
+                """, (item_reason, it["OrderDetailID"]))
+
+                non_wasted_items.append({
+                    "order_detail_id": it["OrderDetailID"],
+                    "item_name": it["ItemName"],
+                    "status_before": it["ItemStatus"]
+                })
+
+        # Mark order as Cancelled
+        cursor.execute("UPDATE Orders SET OrderStatus = 'Cancelled' WHERE OrderID = ?;", (order_id,))
+
+        # Free all tables linked to this order
+        cursor.execute("SELECT TableNumber FROM Order_Tables WHERE OrderID = ?;", (order_id,))
+        tbls = cursor.fetchall()
+        freed_tables = []
+        for t in tbls:
+            cursor.execute("""
+                SELECT COUNT(*) as cnt 
+                FROM Order_Tables ot 
+                JOIN Orders o ON ot.OrderID = o.OrderID 
+                WHERE ot.TableNumber = ? AND o.OrderID != ? AND o.OrderStatus = 'In Progress';
+            """, (t["TableNumber"], order_id))
+            if cursor.fetchone()["cnt"] == 0:
+                cursor.execute("UPDATE Tables SET CurrentStatus = 'Available' WHERE TableNumber = ?;", (t["TableNumber"],))
+                freed_tables.append(t["TableNumber"])
+
+        return {
+            "status": "success",
+            "order_id": order_id,
+            "order_status": "Cancelled",
+            "wasted_items": wasted_items,
+            "non_wasted_items": non_wasted_items,
+            "total_waste_cost": round(total_waste_cost, 2),
+            "freed_tables": freed_tables,
+            "message": f"Order #{order_id} cancelled. {len(wasted_items)} dish(es) during/after cooking sent to Waste Log (loss Rs.{total_waste_cost:.2f}). {len(non_wasted_items)} dish(es) before cooking cancelled without waste."
         }
 
 

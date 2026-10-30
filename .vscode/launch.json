@@ -1,0 +1,48 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "FastAPI: Run & Debug Server",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "uvicorn",
+            "args": [
+                "app.main:app",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "8000",
+                "--reload"
+            ],
+            "jinja": true,
+            "justMyCode": false,
+            "env": {
+                "PYTHONUNBUFFERED": "1"
+            }
+        },
+        {
+            "name": "Test: E2E API Test (Requires Server Running)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/test_e2e_api.py",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "Test: Database Constraints (Standalone)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/database/test_constraints.py",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "Python: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        }
+    ]
+}

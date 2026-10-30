@@ -61,7 +61,7 @@
             <span class="bubble-badge badge-orange">Station KDS</span>
           </div>
           <h3 class="role-card-title">Chef</h3>
-          <p class="role-card-desc">Kitchen Display System (KDS), live order queue, cook status progression, dish cancellations with waste logs, and proposals.</p>
+          <p class="role-card-desc">Kitchen Display System (KDS), live order queue, cook status progression, portion inventory, and proposals.</p>
           <div class="role-card-footer">
             <span class="role-card-action">Login as Chef →</span>
           </div>
@@ -418,7 +418,7 @@
               <div class="bubble-card-header">
                 <div>
                   <div class="bubble-card-title">👨‍🍳 5.2 Chef Culinary Production Leaderboard</div>
-                  <div style="font-size:11px; color:var(--text-muted);">Points = Total Dishes Prepared × Avg Food Rating</div>
+                  <div style="font-size:11px; color:var(--text-muted);">Points = Total Prepared × Avg Food Rating</div>
                 </div>
                 <span class="bubble-badge badge-green">View_Chef_Performance</span>
               </div>
@@ -585,6 +585,46 @@
     </div>
   </div>
 
+
+  <!-- =====================================================================
+       MODAL 3B: CANCEL DISH / PORTIONS FROM ACTIVE TICKET
+  ===================================================================== -->
+  <div id="cancelDishModal" class="bubble-modal-backdrop">
+    <div class="bubble-modal-sheet">
+      <div class="modal-head">
+        <h2>✕ Cancel Dish / Portions</h2>
+        <button class="btn-close-bubble" onclick="WaiterModule.closeCancelDishModal()">✕</button>
+      </div>
+
+      <input type="hidden" id="cancelDishDetailId">
+      <input type="hidden" id="cancelDishCurrentStatus">
+      <input type="hidden" id="cancelDishTotalQty">
+
+      <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:12px; margin-bottom:14px;">
+        <div style="font-weight:800; font-size:15px; color:var(--text-primary);" id="cancelDishName">Dish Name</div>
+        <div style="font-size:12px; color:var(--text-muted); margin-top:2px;" id="cancelDishStatusBadge">Status: Pending</div>
+      </div>
+
+      <div id="cancelDishWasteNotice" style="padding:10px 12px; border-radius:12px; margin-bottom:14px; font-size:12px; font-weight:600;"></div>
+
+      <div class="form-group">
+        <label class="form-label" id="cancelDishQtyLabel">Quantity to Cancel (Max: 1)</label>
+        <input type="number" id="cancelDishQtyInput" class="bubble-input" value="1" min="1" max="1" style="font-size:15px; font-weight:700;">
+        <span style="font-size:11px; color:var(--text-muted);" id="cancelDishQtyHelp">Enter number of portions to cancel</span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Cancellation Reason (Optional)</label>
+        <input type="text" id="cancelDishReasonInput" class="bubble-input" placeholder="e.g. Customer changed mind">
+      </div>
+
+      <div style="display:flex; gap:10px; margin-top:16px;">
+        <button class="btn-bubble btn-bubble-secondary" style="flex:1;" onclick="WaiterModule.closeCancelDishModal()">Keep Item</button>
+        <button class="btn-bubble btn-bubble-danger" style="flex:1.2;" onclick="WaiterModule.submitCancelDish()">✕ Confirm Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- =====================================================================
        MODAL 2: VERIFIED CUSTOMER FEEDBACK (ANTI-FRAUD GATEKEEPER)
   ===================================================================== -->
@@ -673,6 +713,46 @@
     </div>
   </div>
 
+
+  <!-- =====================================================================
+       MODAL 3B: CANCEL DISH / PORTIONS FROM ACTIVE TICKET
+  ===================================================================== -->
+  <div id="cancelDishModal" class="bubble-modal-backdrop">
+    <div class="bubble-modal-sheet">
+      <div class="modal-head">
+        <h2>✕ Cancel Dish / Portions</h2>
+        <button class="btn-close-bubble" onclick="WaiterModule.closeCancelDishModal()">✕</button>
+      </div>
+
+      <input type="hidden" id="cancelDishDetailId">
+      <input type="hidden" id="cancelDishCurrentStatus">
+      <input type="hidden" id="cancelDishTotalQty">
+
+      <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:12px; margin-bottom:14px;">
+        <div style="font-weight:800; font-size:15px; color:var(--text-primary);" id="cancelDishName">Dish Name</div>
+        <div style="font-size:12px; color:var(--text-muted); margin-top:2px;" id="cancelDishStatusBadge">Status: Pending</div>
+      </div>
+
+      <div id="cancelDishWasteNotice" style="padding:10px 12px; border-radius:12px; margin-bottom:14px; font-size:12px; font-weight:600;"></div>
+
+      <div class="form-group">
+        <label class="form-label" id="cancelDishQtyLabel">Quantity to Cancel (Max: 1)</label>
+        <input type="number" id="cancelDishQtyInput" class="bubble-input" value="1" min="1" max="1" style="font-size:15px; font-weight:700;">
+        <span style="font-size:11px; color:var(--text-muted);" id="cancelDishQtyHelp">Enter number of portions to cancel</span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Cancellation Reason (Optional)</label>
+        <input type="text" id="cancelDishReasonInput" class="bubble-input" placeholder="e.g. Customer changed mind">
+      </div>
+
+      <div style="display:flex; gap:10px; margin-top:16px;">
+        <button class="btn-bubble btn-bubble-secondary" style="flex:1;" onclick="WaiterModule.closeCancelDishModal()">Keep Item</button>
+        <button class="btn-bubble btn-bubble-danger" style="flex:1.2;" onclick="WaiterModule.submitCancelDish()">✕ Confirm Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- =====================================================================
        MODAL 3: ADD DISH TO ACTIVE TICKET
   ===================================================================== -->
@@ -698,6 +778,85 @@
       <button class="btn-bubble btn-bubble-primary btn-bubble-lg" onclick="WaiterModule.submitAddDish()">
         ✓ Dispatch Dish to Kitchen
       </button>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       MODAL 3B: CANCEL DISH / PORTIONS FROM ACTIVE TICKET
+  ===================================================================== -->
+  <div id="cancelDishModal" class="bubble-modal-backdrop">
+    <div class="bubble-modal-sheet">
+      <div class="modal-head">
+        <h2>✕ Cancel Dish / Portions</h2>
+        <button class="btn-close-bubble" onclick="WaiterModule.closeCancelDishModal()">✕</button>
+      </div>
+
+      <input type="hidden" id="cancelDishDetailId">
+      <input type="hidden" id="cancelDishCurrentStatus">
+      <input type="hidden" id="cancelDishTotalQty">
+
+      <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:12px; margin-bottom:14px;">
+        <div style="font-weight:800; font-size:15px; color:var(--text-primary);" id="cancelDishName">Dish Name</div>
+        <div style="font-size:12px; color:var(--text-muted); margin-top:2px;" id="cancelDishStatusBadge">Status: Pending</div>
+      </div>
+
+      <div id="cancelDishWasteNotice" style="padding:10px 12px; border-radius:12px; margin-bottom:14px; font-size:12px; font-weight:600;"></div>
+
+      <div class="form-group">
+        <label class="form-label" id="cancelDishQtyLabel">Quantity to Cancel (Max: 1)</label>
+        <input type="number" id="cancelDishQtyInput" class="bubble-input" value="1" min="1" max="1" style="font-size:15px; font-weight:700;">
+        <span style="font-size:11px; color:var(--text-muted);" id="cancelDishQtyHelp">Enter number of portions to cancel</span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Cancellation Reason (Optional)</label>
+        <input type="text" id="cancelDishReasonInput" class="bubble-input" placeholder="e.g. Customer changed mind">
+      </div>
+
+      <div style="display:flex; gap:10px; margin-top:16px;">
+        <button class="btn-bubble btn-bubble-secondary" style="flex:1;" onclick="WaiterModule.closeCancelDishModal()">Keep Item</button>
+        <button class="btn-bubble btn-bubble-danger" style="flex:1.2;" onclick="WaiterModule.submitCancelDish()">✕ Confirm Cancel</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- =====================================================================
+       MODAL 3B: CANCEL DISH / PORTIONS FROM ACTIVE TICKET
+  ===================================================================== -->
+  <div id="cancelDishModal" class="bubble-modal-backdrop">
+    <div class="bubble-modal-sheet">
+      <div class="modal-head">
+        <h2>✕ Cancel Dish / Portions</h2>
+        <button class="btn-close-bubble" onclick="WaiterModule.closeCancelDishModal()">✕</button>
+      </div>
+
+      <input type="hidden" id="cancelDishDetailId">
+      <input type="hidden" id="cancelDishCurrentStatus">
+      <input type="hidden" id="cancelDishTotalQty">
+
+      <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:12px; margin-bottom:14px;">
+        <div style="font-weight:800; font-size:15px; color:var(--text-primary);" id="cancelDishName">Dish Name</div>
+        <div style="font-size:12px; color:var(--text-muted); margin-top:2px;" id="cancelDishStatusBadge">Status: Pending</div>
+      </div>
+
+      <div id="cancelDishWasteNotice" style="padding:10px 12px; border-radius:12px; margin-bottom:14px; font-size:12px; font-weight:600;"></div>
+
+      <div class="form-group">
+        <label class="form-label" id="cancelDishQtyLabel">Quantity to Cancel (Max: 1)</label>
+        <input type="number" id="cancelDishQtyInput" class="bubble-input" value="1" min="1" max="1" style="font-size:15px; font-weight:700;">
+        <span style="font-size:11px; color:var(--text-muted);" id="cancelDishQtyHelp">Enter number of portions to cancel</span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Cancellation Reason (Optional)</label>
+        <input type="text" id="cancelDishReasonInput" class="bubble-input" placeholder="e.g. Customer changed mind">
+      </div>
+
+      <div style="display:flex; gap:10px; margin-top:16px;">
+        <button class="btn-bubble btn-bubble-secondary" style="flex:1;" onclick="WaiterModule.closeCancelDishModal()">Keep Item</button>
+        <button class="btn-bubble btn-bubble-danger" style="flex:1.2;" onclick="WaiterModule.submitCancelDish()">✕ Confirm Cancel</button>
+      </div>
     </div>
   </div>
 
@@ -754,6 +913,46 @@
     </div>
   </div>
 
+
+  <!-- =====================================================================
+       MODAL 3B: CANCEL DISH / PORTIONS FROM ACTIVE TICKET
+  ===================================================================== -->
+  <div id="cancelDishModal" class="bubble-modal-backdrop">
+    <div class="bubble-modal-sheet">
+      <div class="modal-head">
+        <h2>✕ Cancel Dish / Portions</h2>
+        <button class="btn-close-bubble" onclick="WaiterModule.closeCancelDishModal()">✕</button>
+      </div>
+
+      <input type="hidden" id="cancelDishDetailId">
+      <input type="hidden" id="cancelDishCurrentStatus">
+      <input type="hidden" id="cancelDishTotalQty">
+
+      <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:12px; margin-bottom:14px;">
+        <div style="font-weight:800; font-size:15px; color:var(--text-primary);" id="cancelDishName">Dish Name</div>
+        <div style="font-size:12px; color:var(--text-muted); margin-top:2px;" id="cancelDishStatusBadge">Status: Pending</div>
+      </div>
+
+      <div id="cancelDishWasteNotice" style="padding:10px 12px; border-radius:12px; margin-bottom:14px; font-size:12px; font-weight:600;"></div>
+
+      <div class="form-group">
+        <label class="form-label" id="cancelDishQtyLabel">Quantity to Cancel (Max: 1)</label>
+        <input type="number" id="cancelDishQtyInput" class="bubble-input" value="1" min="1" max="1" style="font-size:15px; font-weight:700;">
+        <span style="font-size:11px; color:var(--text-muted);" id="cancelDishQtyHelp">Enter number of portions to cancel</span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Cancellation Reason (Optional)</label>
+        <input type="text" id="cancelDishReasonInput" class="bubble-input" placeholder="e.g. Customer changed mind">
+      </div>
+
+      <div style="display:flex; gap:10px; margin-top:16px;">
+        <button class="btn-bubble btn-bubble-secondary" style="flex:1;" onclick="WaiterModule.closeCancelDishModal()">Keep Item</button>
+        <button class="btn-bubble btn-bubble-danger" style="flex:1.2;" onclick="WaiterModule.submitCancelDish()">✕ Confirm Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- =====================================================================
        MODAL 5: LOG PURCHASE EXPENSE (PAYROLL / INVESTMENTS)
   ===================================================================== -->
@@ -794,6 +993,46 @@
     </div>
   </div>
 
+
+  <!-- =====================================================================
+       MODAL 3B: CANCEL DISH / PORTIONS FROM ACTIVE TICKET
+  ===================================================================== -->
+  <div id="cancelDishModal" class="bubble-modal-backdrop">
+    <div class="bubble-modal-sheet">
+      <div class="modal-head">
+        <h2>✕ Cancel Dish / Portions</h2>
+        <button class="btn-close-bubble" onclick="WaiterModule.closeCancelDishModal()">✕</button>
+      </div>
+
+      <input type="hidden" id="cancelDishDetailId">
+      <input type="hidden" id="cancelDishCurrentStatus">
+      <input type="hidden" id="cancelDishTotalQty">
+
+      <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:12px; margin-bottom:14px;">
+        <div style="font-weight:800; font-size:15px; color:var(--text-primary);" id="cancelDishName">Dish Name</div>
+        <div style="font-size:12px; color:var(--text-muted); margin-top:2px;" id="cancelDishStatusBadge">Status: Pending</div>
+      </div>
+
+      <div id="cancelDishWasteNotice" style="padding:10px 12px; border-radius:12px; margin-bottom:14px; font-size:12px; font-weight:600;"></div>
+
+      <div class="form-group">
+        <label class="form-label" id="cancelDishQtyLabel">Quantity to Cancel (Max: 1)</label>
+        <input type="number" id="cancelDishQtyInput" class="bubble-input" value="1" min="1" max="1" style="font-size:15px; font-weight:700;">
+        <span style="font-size:11px; color:var(--text-muted);" id="cancelDishQtyHelp">Enter number of portions to cancel</span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Cancellation Reason (Optional)</label>
+        <input type="text" id="cancelDishReasonInput" class="bubble-input" placeholder="e.g. Customer changed mind">
+      </div>
+
+      <div style="display:flex; gap:10px; margin-top:16px;">
+        <button class="btn-bubble btn-bubble-secondary" style="flex:1;" onclick="WaiterModule.closeCancelDishModal()">Keep Item</button>
+        <button class="btn-bubble btn-bubble-danger" style="flex:1.2;" onclick="WaiterModule.submitCancelDish()">✕ Confirm Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- =====================================================================
        MODAL 6: ADD INGREDIENT TO INVENTORY
   ===================================================================== -->
@@ -826,6 +1065,46 @@
     </div>
   </div>
 
+
+  <!-- =====================================================================
+       MODAL 3B: CANCEL DISH / PORTIONS FROM ACTIVE TICKET
+  ===================================================================== -->
+  <div id="cancelDishModal" class="bubble-modal-backdrop">
+    <div class="bubble-modal-sheet">
+      <div class="modal-head">
+        <h2>✕ Cancel Dish / Portions</h2>
+        <button class="btn-close-bubble" onclick="WaiterModule.closeCancelDishModal()">✕</button>
+      </div>
+
+      <input type="hidden" id="cancelDishDetailId">
+      <input type="hidden" id="cancelDishCurrentStatus">
+      <input type="hidden" id="cancelDishTotalQty">
+
+      <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:12px; margin-bottom:14px;">
+        <div style="font-weight:800; font-size:15px; color:var(--text-primary);" id="cancelDishName">Dish Name</div>
+        <div style="font-size:12px; color:var(--text-muted); margin-top:2px;" id="cancelDishStatusBadge">Status: Pending</div>
+      </div>
+
+      <div id="cancelDishWasteNotice" style="padding:10px 12px; border-radius:12px; margin-bottom:14px; font-size:12px; font-weight:600;"></div>
+
+      <div class="form-group">
+        <label class="form-label" id="cancelDishQtyLabel">Quantity to Cancel (Max: 1)</label>
+        <input type="number" id="cancelDishQtyInput" class="bubble-input" value="1" min="1" max="1" style="font-size:15px; font-weight:700;">
+        <span style="font-size:11px; color:var(--text-muted);" id="cancelDishQtyHelp">Enter number of portions to cancel</span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Cancellation Reason (Optional)</label>
+        <input type="text" id="cancelDishReasonInput" class="bubble-input" placeholder="e.g. Customer changed mind">
+      </div>
+
+      <div style="display:flex; gap:10px; margin-top:16px;">
+        <button class="btn-bubble btn-bubble-secondary" style="flex:1;" onclick="WaiterModule.closeCancelDishModal()">Keep Item</button>
+        <button class="btn-bubble btn-bubble-danger" style="flex:1.2;" onclick="WaiterModule.submitCancelDish()">✕ Confirm Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- =====================================================================
        MODAL 7: LOG RAW MATERIAL PROCUREMENT
   ===================================================================== -->
@@ -854,6 +1133,46 @@
       <button class="btn-bubble btn-bubble-primary btn-bubble-lg" onclick="KitchenMgrModule.submitLogProcurement()">
         ✓ Log Raw Material Outlay
       </button>
+    </div>
+  </div>
+
+
+  <!-- =====================================================================
+       MODAL 3B: CANCEL DISH / PORTIONS FROM ACTIVE TICKET
+  ===================================================================== -->
+  <div id="cancelDishModal" class="bubble-modal-backdrop">
+    <div class="bubble-modal-sheet">
+      <div class="modal-head">
+        <h2>✕ Cancel Dish / Portions</h2>
+        <button class="btn-close-bubble" onclick="WaiterModule.closeCancelDishModal()">✕</button>
+      </div>
+
+      <input type="hidden" id="cancelDishDetailId">
+      <input type="hidden" id="cancelDishCurrentStatus">
+      <input type="hidden" id="cancelDishTotalQty">
+
+      <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:12px; margin-bottom:14px;">
+        <div style="font-weight:800; font-size:15px; color:var(--text-primary);" id="cancelDishName">Dish Name</div>
+        <div style="font-size:12px; color:var(--text-muted); margin-top:2px;" id="cancelDishStatusBadge">Status: Pending</div>
+      </div>
+
+      <div id="cancelDishWasteNotice" style="padding:10px 12px; border-radius:12px; margin-bottom:14px; font-size:12px; font-weight:600;"></div>
+
+      <div class="form-group">
+        <label class="form-label" id="cancelDishQtyLabel">Quantity to Cancel (Max: 1)</label>
+        <input type="number" id="cancelDishQtyInput" class="bubble-input" value="1" min="1" max="1" style="font-size:15px; font-weight:700;">
+        <span style="font-size:11px; color:var(--text-muted);" id="cancelDishQtyHelp">Enter number of portions to cancel</span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Cancellation Reason (Optional)</label>
+        <input type="text" id="cancelDishReasonInput" class="bubble-input" placeholder="e.g. Customer changed mind">
+      </div>
+
+      <div style="display:flex; gap:10px; margin-top:16px;">
+        <button class="btn-bubble btn-bubble-secondary" style="flex:1;" onclick="WaiterModule.closeCancelDishModal()">Keep Item</button>
+        <button class="btn-bubble btn-bubble-danger" style="flex:1.2;" onclick="WaiterModule.submitCancelDish()">✕ Confirm Cancel</button>
+      </div>
     </div>
   </div>
 
@@ -899,49 +1218,45 @@
   </div>
 
   <!-- =====================================================================
-       MODAL 8B: CHEF FOOD DISCARD / CANCELLATION & WASTE LOG
+       MODAL 3B: CANCEL DISH / PORTIONS FROM ACTIVE TICKET
   ===================================================================== -->
-  <div id="chefDiscardModal" class="bubble-modal-backdrop">
+  <div id="cancelDishModal" class="bubble-modal-backdrop">
     <div class="bubble-modal-sheet">
       <div class="modal-head">
-        <h2>🗑️ Discard & Cancel Food Order</h2>
-        <button class="btn-close-bubble">✕</button>
+        <h2>✕ Cancel Dish / Portions</h2>
+        <button class="btn-close-bubble" onclick="WaiterModule.closeCancelDishModal()">✕</button>
       </div>
 
-      <input type="hidden" id="discardOrderDetailId">
 
-      <div style="background:#FEF2F2; border:1px solid #FECACA; padding:12px; border-radius:16px; margin-bottom:16px; font-size:12px; color:#991B1B;">
-        <div style="font-weight:800; font-size:14px; margin-bottom:4px;" id="discardDishTitle">Dish Name</div>
-        Cancelling this dish will remove it from the live cooking queue and immediately record its raw ingredient cost in the <strong>Kitchen Manager's Discarded Food & Waste Log</strong>.
+      <input type="hidden" id="cancelDishDetailId">
+      <input type="hidden" id="cancelDishCurrentStatus">
+      <input type="hidden" id="cancelDishTotalQty">
+
+      <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:12px; margin-bottom:14px;">
+        <div style="font-weight:800; font-size:15px; color:var(--text-primary);" id="cancelDishName">Dish Name</div>
+        <div style="font-size:12px; color:var(--text-muted); margin-top:2px;" id="cancelDishStatusBadge">Status: Pending</div>
+      </div>
+
+      <div id="cancelDishWasteNotice" style="padding:10px 12px; border-radius:12px; margin-bottom:14px; font-size:12px; font-weight:600;"></div>
+
+      <div class="form-group">
+        <label class="form-label" id="cancelDishQtyLabel">Quantity to Cancel (Max: 1)</label>
+        <input type="number" id="cancelDishQtyInput" class="bubble-input" value="1" min="1" max="1" style="font-size:15px; font-weight:700;">
+        <span style="font-size:11px; color:var(--text-muted);" id="cancelDishQtyHelp">Enter number of portions to cancel</span>
       </div>
 
       <div class="form-group">
-        <label class="form-label">Discard Reason</label>
-        <select id="discardReasonPreset" class="bubble-input" onchange="ChefModule.onDiscardPresetChange()">
-          <option value="Food burnt during cooking">Food burnt during cooking</option>
-          <option value="Customer cancelled after prep started">Customer cancelled after prep started</option>
-          <option value="Quality defect / Contamination / Spilled">Quality defect / Contamination / Spilled</option>
-          <option value="Customer allergy notification">Customer allergy notification</option>
-          <option value="Wrong dish preparation">Wrong dish preparation</option>
-          <option value="Custom">Other reason (Specify below)...</option>
-        </select>
+        <label class="form-label">Cancellation Reason (Optional)</label>
+        <input type="text" id="cancelDishReasonInput" class="bubble-input" placeholder="e.g. Customer changed mind">
       </div>
 
-      <div class="form-group" id="discardCustomReasonGroup" style="display:none;">
-        <label class="form-label">Custom Details / Notes</label>
-        <input type="text" id="discardCustomReason" class="bubble-input" placeholder="e.g. Pan overheated, food dropped accidentally...">
-      </div>
-
-      <div style="display:flex; gap:10px; margin-top:20px;">
-        <button class="btn-bubble btn-bubble-secondary btn-bubble-lg" style="flex:1;" onclick="ChefModule.closeDiscardModal()">
-          Cancel
-        </button>
-        <button class="btn-bubble btn-bubble-danger btn-bubble-lg" style="flex:2;" onclick="ChefModule.confirmDiscardDish()">
-          🗑️ Confirm Discard & Log Waste
-        </button>
+      <div style="display:flex; gap:10px; margin-top:16px;">
+        <button class="btn-bubble btn-bubble-secondary" style="flex:1;" onclick="WaiterModule.closeCancelDishModal()">Keep Item</button>
+        <button class="btn-bubble btn-bubble-danger" style="flex:1.2;" onclick="WaiterModule.submitCancelDish()">✕ Confirm Cancel</button>
       </div>
     </div>
   </div>
+
 
   <!-- =====================================================================
        MODAL 9: REGISTER NEW USER / STAFF ACCOUNT
@@ -1007,6 +1322,46 @@
     </div>
   </div>
 
+  <!-- =====================================================================
+       MODAL 3B: CANCEL DISH / PORTIONS FROM ACTIVE TICKET
+  ===================================================================== -->
+  <div id="cancelDishModal" class="bubble-modal-backdrop">
+    <div class="bubble-modal-sheet">
+      <div class="modal-head">
+        <h2>✕ Cancel Dish / Portions</h2>
+        <button class="btn-close-bubble" onclick="WaiterModule.closeCancelDishModal()">✕</button>
+      </div>
+
+      <input type="hidden" id="cancelDishDetailId">
+      <input type="hidden" id="cancelDishCurrentStatus">
+      <input type="hidden" id="cancelDishTotalQty">
+
+
+      <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:12px; margin-bottom:14px;">
+        <div style="font-weight:800; font-size:15px; color:var(--text-primary);" id="cancelDishName">Dish Name</div>
+        <div style="font-size:12px; color:var(--text-muted); margin-top:2px;" id="cancelDishStatusBadge">Status: Pending</div>
+      </div>
+
+      <div id="cancelDishWasteNotice" style="padding:10px 12px; border-radius:12px; margin-bottom:14px; font-size:12px; font-weight:600;"></div>
+
+      <div class="form-group">
+        <label class="form-label" id="cancelDishQtyLabel">Quantity to Cancel (Max: 1)</label>
+        <input type="number" id="cancelDishQtyInput" class="bubble-input" value="1" min="1" max="1" style="font-size:15px; font-weight:700;">
+        <span style="font-size:11px; color:var(--text-muted);" id="cancelDishQtyHelp">Enter number of portions to cancel</span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Cancellation Reason (Optional)</label>
+        <input type="text" id="cancelDishReasonInput" class="bubble-input" placeholder="e.g. Customer changed mind">
+      </div>
+
+      <div style="display:flex; gap:10px; margin-top:16px;">
+        <button class="btn-bubble btn-bubble-secondary" style="flex:1;" onclick="WaiterModule.closeCancelDishModal()">Keep Item</button>
+        <button class="btn-bubble btn-bubble-danger" style="flex:1.2;" onclick="WaiterModule.submitCancelDish()">✕ Confirm Cancel</button>
+      </div>
+    </div>
+  </div>
+
 
 
   <!-- =====================================================================
@@ -1038,6 +1393,46 @@
       <button class="btn-bubble btn-bubble-primary btn-bubble-lg" onclick="App.submitUpdateCredentials()">
         ✓ Save Updated Credentials
       </button>
+    </div>
+  </div>
+
+
+  <!-- =====================================================================
+       MODAL 3B: CANCEL DISH / PORTIONS FROM ACTIVE TICKET
+  ===================================================================== -->
+  <div id="cancelDishModal" class="bubble-modal-backdrop">
+    <div class="bubble-modal-sheet">
+      <div class="modal-head">
+        <h2>✕ Cancel Dish / Portions</h2>
+        <button class="btn-close-bubble" onclick="WaiterModule.closeCancelDishModal()">✕</button>
+      </div>
+
+      <input type="hidden" id="cancelDishDetailId">
+      <input type="hidden" id="cancelDishCurrentStatus">
+      <input type="hidden" id="cancelDishTotalQty">
+
+      <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:12px; margin-bottom:14px;">
+        <div style="font-weight:800; font-size:15px; color:var(--text-primary);" id="cancelDishName">Dish Name</div>
+        <div style="font-size:12px; color:var(--text-muted); margin-top:2px;" id="cancelDishStatusBadge">Status: Pending</div>
+      </div>
+
+      <div id="cancelDishWasteNotice" style="padding:10px 12px; border-radius:12px; margin-bottom:14px; font-size:12px; font-weight:600;"></div>
+
+      <div class="form-group">
+        <label class="form-label" id="cancelDishQtyLabel">Quantity to Cancel (Max: 1)</label>
+        <input type="number" id="cancelDishQtyInput" class="bubble-input" value="1" min="1" max="1" style="font-size:15px; font-weight:700;">
+        <span style="font-size:11px; color:var(--text-muted);" id="cancelDishQtyHelp">Enter number of portions to cancel</span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Cancellation Reason (Optional)</label>
+        <input type="text" id="cancelDishReasonInput" class="bubble-input" placeholder="e.g. Customer changed mind">
+      </div>
+
+      <div style="display:flex; gap:10px; margin-top:16px;">
+        <button class="btn-bubble btn-bubble-secondary" style="flex:1;" onclick="WaiterModule.closeCancelDishModal()">Keep Item</button>
+        <button class="btn-bubble btn-bubble-danger" style="flex:1.2;" onclick="WaiterModule.submitCancelDish()">✕ Confirm Cancel</button>
+      </div>
     </div>
   </div>
 

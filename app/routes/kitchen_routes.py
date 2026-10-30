@@ -205,13 +205,13 @@ def process_menu_request(
                 if existing:
                     cursor.execute("""
                         UPDATE Menu_Items 
-                        SET Category = ?, Price = ?, IsAvailable = 1, AssignedChefID = ?, IsActive = 1
+                        SET Category = ?, Price = ?, StockQuantity = 10, IsAvailable = 1, AssignedChefID = ?, IsActive = 1
                         WHERE MenuItemID = ?;
                     """, (req.category, req.price, chef_id, existing["MenuItemID"]))
                 else:
                     cursor.execute("""
-                        INSERT INTO Menu_Items (ItemName, Category, Price, IsAvailable, AssignedChefID, IsActive)
-                        VALUES (?, ?, ?, 1, ?, 1);
+                        INSERT INTO Menu_Items (ItemName, Category, Price, StockQuantity, IsAvailable, AssignedChefID, IsActive)
+                        VALUES (?, ?, ?, 10, 1, ?, 1);
                     """, (mr["DishName"], req.category, req.price, chef_id))
                 msg += f" Added to active menu under category '{req.category}' at Rs.{req.price}."
             elif mr["RequestType"] == 'Remove':

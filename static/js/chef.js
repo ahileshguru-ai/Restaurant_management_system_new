@@ -101,45 +101,30 @@ const ChefModule = {
         `;
       } else if (item.ItemStatus === "Pending") {
         actionButtons = `
-          <div style="display:flex; gap:8px; width:100%;">
-            <button class="btn-bubble btn-bubble-primary btn-bubble-sm" style="flex:1.4;" onclick="ChefModule.updateDishStatus(${item.OrderDetailID}, 'Cooking')">
+          <div style="width:100%;">
+            <button class="btn-bubble btn-bubble-primary btn-bubble-sm" style="width:100%;" onclick="ChefModule.updateDishStatus(${item.OrderDetailID}, 'Cooking')">
               🔥 Start Cooking
-            </button>
-            <button class="btn-bubble btn-bubble-danger btn-bubble-sm" style="flex:1; white-space:nowrap; background:#FEE2E2; color:#B91C1C; border:1.5px solid #FECACA; font-weight:700;" title="Cancel & Discard food to Waste Log" onclick="ChefModule.openDiscardModal(${item.OrderDetailID}, '${this.escapeStr(item.ItemName)}', ${item.OrderID})">
-              🗑️ Cancel
             </button>
           </div>
         `;
       } else if (item.ItemStatus === "Cooking") {
         actionButtons = `
-          <div style="display:flex; gap:8px; width:100%;">
-            <button class="btn-bubble btn-bubble-primary btn-bubble-sm" style="flex:1.4; background:linear-gradient(135deg, #059669, #047857);" onclick="ChefModule.updateDishStatus(${item.OrderDetailID}, 'Ready')">
+          <div style="width:100%;">
+            <button class="btn-bubble btn-bubble-primary btn-bubble-sm" style="width:100%; background:linear-gradient(135deg, #059669, #047857);" onclick="ChefModule.updateDishStatus(${item.OrderDetailID}, 'Ready')">
               ✓ Mark as Ready
-            </button>
-            <button class="btn-bubble btn-bubble-danger btn-bubble-sm" style="flex:1; white-space:nowrap; background:#FEE2E2; color:#B91C1C; border:1.5px solid #FECACA; font-weight:700;" title="Cancel & Discard food to Waste Log" onclick="ChefModule.openDiscardModal(${item.OrderDetailID}, '${this.escapeStr(item.ItemName)}', ${item.OrderID})">
-              🗑️ Cancel
             </button>
           </div>
         `;
       } else if (item.ItemStatus === "Ready") {
         actionButtons = `
-          <div style="display:flex; gap:8px; align-items:center; width:100%;">
-            <span style="font-size:12px; font-weight:700; color:var(--brand-green-dark); flex:1.4; text-align:center;">
+          <div style="width:100%; text-align:center;">
+            <span style="font-size:12px; font-weight:700; color:var(--brand-green-dark);">
               ✓ Plated & Ready
             </span>
-            <button class="btn-bubble btn-bubble-danger btn-bubble-sm" style="flex:1; white-space:nowrap; background:#FEE2E2; color:#B91C1C; border:1.5px solid #FECACA; font-weight:700;" title="Discard food" onclick="ChefModule.openDiscardModal(${item.OrderDetailID}, '${this.escapeStr(item.ItemName)}', ${item.OrderID})">
-              🗑️ Cancel
-            </button>
           </div>
         `;
       } else {
-        actionButtons = `
-          <div style="display:flex; justify-content:flex-end; width:100%;">
-            <button class="btn-bubble btn-bubble-danger btn-bubble-sm" style="white-space:nowrap; background:#FEE2E2; color:#B91C1C; border:1.5px solid #FECACA; font-weight:700;" title="Cancel dish" onclick="ChefModule.openDiscardModal(${item.OrderDetailID}, '${this.escapeStr(item.ItemName)}', ${item.OrderID})">
-              🗑️ Cancel
-            </button>
-          </div>
-        `;
+        actionButtons = "";
       }
 
       ticket.innerHTML = `
@@ -170,49 +155,6 @@ const ChefModule = {
   escapeStr(str) {
     if (!str) return "";
     return str.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-  },
-
-  openDiscardModal(orderDetailId, dishName, orderId) {
-    document.getElementById("discardOrderDetailId").value = orderDetailId;
-    document.getElementById("discardDishTitle").textContent = `${dishName} (Order #${orderId})`;
-    document.getElementById("discardReasonPreset").value = "Food burnt during cooking";
-    document.getElementById("discardCustomReason").value = "";
-    document.getElementById("discardCustomReasonGroup").style.display = "none";
-    document.getElementById("chefDiscardModal").classList.add("open");
-  },
-
-  closeDiscardModal() {
-    document.getElementById("chefDiscardModal").classList.remove("open");
-  },
-
-  onDiscardPresetChange() {
-    const preset = document.getElementById("discardReasonPreset").value;
-    const customGroup = document.getElementById("discardCustomReasonGroup");
-    if (preset === "Custom") {
-      customGroup.style.display = "block";
-      document.getElementById("discardCustomReason").focus();
-    } else {
-      customGroup.style.display = "none";
-    }
-  },
-
-  async confirmDiscardDish() {
-    const detailId = document.getElementById("discardOrderDetailId").value;
-    const preset = document.getElementById("discardReasonPreset").value;
-    const custom = document.getElementById("discardCustomReason").value.trim();
-    const reason = preset === "Custom" ? (custom || "Food discarded during cooking") : preset;
-
-    try {
-      const res = await App.apiFetch(`/api/chef/order-details/${detailId}/discard`, {
-        method: "POST",
-        body: { reason: reason }
-      });
-      App.showToast(res.message, "info");
-      this.closeDiscardModal();
-      await this.fetchQueue();
-    } catch (e) {
-      App.showToast("Failed to discard dish: " + (e.message || e), "error");
-    }
   },
 
   async updateDishStatus(detailId, newStatus) {
@@ -248,44 +190,102 @@ const ChefModule = {
     list.innerHTML = "";
     this.dishes.forEach(dish => {
       const row = document.createElement("div");
-      row.style.cssText = "display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid #F1F5F9; font-size:13px;";
-      const isAvail = Boolean(dish.IsAvailable);
+      row.style.cssText = "display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid #F1F5F9; font-size:13px; gap:12px; flex-wrap:wrap;";
+      const stock = typeof dish.StockQuantity === "number" ? dish.StockQuantity : (dish.IsAvailable ? 10 : 0);
+      const isAvail = stock > 0 && Boolean(dish.IsAvailable);
 
       row.innerHTML = `
-        <div>
-          <span style="font-weight:700;">${dish.ItemName}</span>
-          <span class="bubble-badge ${isAvail ? 'badge-green' : 'badge-red'}" style="margin-left:6px; font-size:10px;">
-            ${isAvail ? 'AVAILABLE' : 'OUT OF STOCK'}
-          </span>
-          <div style="font-size:11px; color:var(--text-muted);">
+        <div style="min-width:180px; flex:1;">
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span style="font-weight:700; font-size:14px;">${dish.ItemName}</span>
+            <span class="bubble-badge ${isAvail ? 'badge-green' : 'badge-red'}" style="font-size:10px; font-weight:800;">
+              ${isAvail ? `🟢 ${stock} IN STOCK` : '🔴 OUT OF STOCK (0)'}
+            </span>
+          </div>
+          <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">
             Rs.${dish.Price.toFixed(2)} • ${dish.Category}
           </div>
         </div>
-        <div>
+
+        <div style="display:flex; align-items:center; gap:6px;">
+          <span style="font-size:11px; color:var(--text-muted); font-weight:600;">Portions:</span>
+          <input type="number" id="dishStockInput_${dish.MenuItemID}" min="0" max="999" value="${stock}" 
+                 style="width:58px; text-align:center; padding:4px 6px; font-weight:700; font-size:13px; border:1.5px solid #CBD5E1; border-radius:6px; background:#F8FAFC;"
+                 title="Enter portions prepared in advance">
+          <button class="btn-bubble btn-bubble-primary btn-bubble-sm" style="padding:4px 9px; font-size:11px; font-weight:700;"
+                  onclick="ChefModule.saveDishStock(${dish.MenuItemID}, '${ChefModule.escapeStr(dish.ItemName)}')">
+            Save
+          </button>
+          <button class="btn-bubble btn-bubble-secondary btn-bubble-sm" style="padding:4px 7px; font-size:10px; font-weight:700;"
+                  title="Quickly add 5 portions prepared fresh"
+                  onclick="ChefModule.quickAddStock(${dish.MenuItemID}, 5, '${ChefModule.escapeStr(dish.ItemName)}')">
+            +5
+          </button>
+          <button class="btn-bubble btn-bubble-secondary btn-bubble-sm" style="padding:4px 7px; font-size:10px; font-weight:700;"
+                  title="Quickly add 10 portions prepared fresh"
+                  onclick="ChefModule.quickAddStock(${dish.MenuItemID}, 10, '${ChefModule.escapeStr(dish.ItemName)}')">
+            +10
+          </button>
           ${isAvail ? `
-            <button class="btn-bubble btn-bubble-danger btn-bubble-sm" onclick="ChefModule.promptOutOfStock(${dish.MenuItemID}, '${dish.ItemName}')">
-              Flag Out of Stock
+            <button class="btn-bubble btn-bubble-danger btn-bubble-sm" style="padding:4px 8px; font-size:10px;"
+                    title="Log shortage cause and set to 0"
+                    onclick="ChefModule.promptOutOfStock(${dish.MenuItemID}, '${ChefModule.escapeStr(dish.ItemName)}')">
+              Shortage (0)
             </button>
-          ` : `
-            <button class="btn-bubble btn-bubble-primary btn-bubble-sm" onclick="ChefModule.restoreStock(${dish.MenuItemID})">
-              Restore In Stock
-            </button>
-          `}
+          ` : ''}
         </div>
       `;
       list.appendChild(row);
     });
   },
 
+  async saveDishStock(itemId, itemName) {
+    const input = document.getElementById(`dishStockInput_${itemId}`);
+    if (!input) return;
+    const qty = parseInt(input.value);
+    if (isNaN(qty) || qty < 0) {
+      App.showToast("Stock quantity must be a non-negative number.", "error");
+      return;
+    }
+
+    try {
+      const res = await App.apiFetch(`/api/chef/menu/${itemId}/stock`, {
+        method: "PUT",
+        body: { stock_quantity: qty }
+      });
+      App.showToast(res.message || `Stock for '${itemName}' updated to ${qty} portion(s)!`, "success");
+      await this.fetchDishes();
+    } catch (e) {
+      App.showToast("Failed to update stock: " + e.message, "error");
+    }
+  },
+
+  async quickAddStock(itemId, delta, itemName) {
+    const input = document.getElementById(`dishStockInput_${itemId}`);
+    const currentQty = input ? parseInt(input.value) || 0 : 0;
+    const newQty = Math.max(0, currentQty + delta);
+
+    try {
+      const res = await App.apiFetch(`/api/chef/menu/${itemId}/stock`, {
+        method: "PUT",
+        body: { stock_quantity: newQty }
+      });
+      App.showToast(`Prepared +${delta} portions of '${itemName}'. Total available: ${newQty}.`, "success");
+      await this.fetchDishes();
+    } catch (e) {
+      App.showToast("Failed to update stock: " + e.message, "error");
+    }
+  },
+
   promptOutOfStock(itemId, itemName) {
-    const reason = prompt(`Enter shortage cause for '${itemName}':\n(Executes ACID transaction writing to Shortage_Logs)`);
+    const reason = prompt(`Enter shortage cause for '${itemName}':\n(Executes ACID transaction writing to Shortage_Logs and sets stock to 0)`);
     if (!reason || !reason.trim()) return;
 
     App.apiFetch(`/api/chef/menu/${itemId}/out-of-stock`, {
       method: "POST",
       body: { reason: reason.trim() }
     }).then(res => {
-      App.showToast(`Out-of-Stock transaction committed for '${res.item_name}'!`, "info");
+      App.showToast(`Shortage transaction logged for '${res.item_name}' (Stock set to 0)!`, "info");
       this.fetchDishes();
     }).catch(err => {
       App.showToast("Failed to toggle stock: " + err.message, "error");
@@ -295,7 +295,7 @@ const ChefModule = {
   async restoreStock(itemId) {
     try {
       await App.apiFetch(`/api/chef/menu/${itemId}/restore-stock`, { method: "POST" });
-      App.showToast("Dish availability restored!", "success");
+      App.showToast("Dish stock restored to 10 portions!", "success");
       await this.fetchDishes();
     } catch (e) {
       App.showToast("Restore failed: " + e.message, "error");

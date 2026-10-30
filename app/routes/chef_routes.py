@@ -13,7 +13,8 @@ from typing import Optional, Dict, Any, List
 
 from database.db import (
     get_connection, transaction, chef_review_cancel_consent,
-    chef_discard_order_item, out_of_stock_atomic_transaction
+    chef_discard_order_item, out_of_stock_atomic_transaction,
+    update_menu_item_stock
 )
 from app.auth import require_roles
 
@@ -40,6 +41,10 @@ class OutOfStockRequest(BaseModel):
 class ToggleStockRequest(BaseModel):
     is_available: bool
     reason: Optional[str] = "Restocked"
+
+
+class UpdateStockRequest(BaseModel):
+    stock_quantity: int = Field(..., ge=0, description="Available portions present in stock")
 
 
 class MenuProposalRequest(BaseModel):
@@ -199,6 +204,13 @@ def discard_order_item(
     if not is_admin and item["PreparedBy_EmployeeID"] != chef_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Dish is assigned to a different chef station.")
 
+    # Chefs cannot cancel orders directly. Waiters handle customer cancellations.
+    if current_user["RoleName"] == "Chef":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Chefs are not permitted to cancel orders. Only waiters can process cancellations for customer orders."
+        )
+
     try:
         res = chef_discard_order_item(detail_id, req.reason or "Food discarded during cooking", chef_id)
         return res
@@ -229,7 +241,7 @@ def get_active_menu_dishes(current_user: Dict[str, Any] = Depends(chef_guard)):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT m.MenuItemID, m.ItemName, m.Category, m.Price, m.IsAvailable,
+        SELECT m.MenuItemID, m.ItemName, m.Category, m.Price, m.StockQuantity, m.IsAvailable,
                s.Name AS AssignedChefName
         FROM Menu_Items m
         LEFT JOIN Staff s ON m.AssignedChefID = s.EmployeeID
@@ -241,6 +253,27 @@ def get_active_menu_dishes(current_user: Dict[str, Any] = Depends(chef_guard)):
     return {"dishes": dishes}
 
 
+@router.put("/menu/{item_id}/stock")
+def set_dish_stock(
+    item_id: int,
+    req: UpdateStockRequest,
+    current_user: Dict[str, Any] = Depends(chef_guard)
+):
+    """
+    Updates the numerical stock quantity for a dish in advance.
+    - Automatically marks dish as in-stock if stock > 0.
+    - Automatically marks dish as out-of-stock if stock == 0.
+    - Can be updated at any time by the assigned chef or kitchen manager.
+    """
+    chef_id = current_user["EmployeeID"]
+    is_admin = current_user["RoleName"] in ("Kitchen Manager", "Shop Manager")
+    try:
+        res = update_menu_item_stock(item_id, req.stock_quantity, None if is_admin else chef_id)
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
 @router.post("/menu/{item_id}/out-of-stock")
 def flag_dish_out_of_stock(
     item_id: int,
@@ -249,7 +282,7 @@ def flag_dish_out_of_stock(
 ):
     """
     Executes Out-of-Stock Atomic Transaction:
-    Toggles IsAvailable = FALSE and atomically inserts shortage incident into Shortage_Logs.
+    Toggles IsAvailable = FALSE, sets StockQuantity = 0, and atomically inserts shortage incident into Shortage_Logs.
     """
     chef_id = current_user["EmployeeID"]
     try:
@@ -264,11 +297,14 @@ def restore_dish_stock(
     item_id: int,
     current_user: Dict[str, Any] = Depends(chef_guard)
 ):
-    """Restores dish back to available."""
-    with transaction() as conn:
-        cursor = conn.cursor()
-        cursor.execute("UPDATE Menu_Items SET IsAvailable = 1 WHERE MenuItemID = ?;", (item_id,))
-    return {"status": "success", "menu_item_id": item_id, "is_available": True}
+    """Restores dish back to available with a default replenished stock of 10 portions."""
+    chef_id = current_user["EmployeeID"]
+    is_admin = current_user["RoleName"] in ("Kitchen Manager", "Shop Manager")
+    try:
+        res = update_menu_item_stock(item_id, 10, None if is_admin else chef_id)
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.post("/menu-requests")

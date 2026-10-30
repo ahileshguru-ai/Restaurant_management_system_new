@@ -119,24 +119,29 @@ const WaiterModule = {
     this.menu.forEach(item => {
       const row = document.createElement("div");
       row.style.cssText = "display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid #F1F5F9;";
-      const isOos = !item.IsAvailable;
+      const stock = typeof item.StockQuantity === "number" ? item.StockQuantity : (item.IsAvailable ? 10 : 0);
+      const isOos = !item.IsAvailable || stock <= 0;
       const currentQty = this.orderItems[item.MenuItemID] || 0;
+      const remainingStock = Math.max(0, stock - currentQty);
 
       row.innerHTML = `
         <div>
           <div style="font-weight:700; font-size:14px; color:${isOos ? '#9CA3AF' : 'var(--text-primary)'}">
-            ${item.ItemName} ${isOos ? '<span class="bubble-badge badge-red" style="font-size:9px;">OUT OF STOCK</span>' : ''}
+            ${item.ItemName} 
+            ${isOos 
+              ? '<span class="bubble-badge badge-red" style="font-size:9px; font-weight:800; margin-left:6px;">OUT OF STOCK (0 left)</span>' 
+              : `<span class="bubble-badge badge-green" style="font-size:10px; font-weight:800; margin-left:6px;">${stock} in stock (${remainingStock} left)</span>`}
           </div>
-          <div style="font-size:11px; color:var(--text-muted);">
+          <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">
             ${item.Category} • Rs.${item.Price.toFixed(2)} • Chef: ${item.AssignedChefName}
           </div>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
           <button class="btn-bubble btn-bubble-secondary btn-bubble-sm" style="width:28px; height:28px; padding:0;" 
-                  ${isOos ? 'disabled' : ''} onclick="WaiterModule.adjustItemQty(${item.MenuItemID}, -1)">-</button>
+                  ${currentQty <= 0 ? 'disabled' : ''} onclick="WaiterModule.adjustItemQty(${item.MenuItemID}, -1)">-</button>
           <span style="font-weight:800; min-width:18px; text-align:center;">${currentQty}</span>
           <button class="btn-bubble btn-bubble-primary btn-bubble-sm" style="width:28px; height:28px; padding:0;" 
-                  ${isOos ? 'disabled' : ''} onclick="WaiterModule.adjustItemQty(${item.MenuItemID}, 1)">+</button>
+                  ${isOos || currentQty >= stock ? 'disabled' : ''} onclick="WaiterModule.adjustItemQty(${item.MenuItemID}, 1)">+</button>
         </div>
       `;
       list.appendChild(row);
@@ -146,8 +151,16 @@ const WaiterModule = {
   },
 
   adjustItemQty(menuItemId, delta) {
+    const item = this.menu.find(m => m.MenuItemID === menuItemId);
+    const stock = item ? (typeof item.StockQuantity === "number" ? item.StockQuantity : 10) : 999;
     const cur = this.orderItems[menuItemId] || 0;
-    const next = Math.max(0, cur + delta);
+
+    if (delta > 0 && cur >= stock) {
+      App.showToast(`Only ${stock} portion(s) of '${item ? item.ItemName : 'this dish'}' available in stock.`, "warning");
+      return;
+    }
+
+    const next = Math.max(0, Math.min(stock, cur + delta));
     if (next === 0) delete this.orderItems[menuItemId];
     else this.orderItems[menuItemId] = next;
     this.renderMenuPicker();
@@ -242,7 +255,7 @@ const WaiterModule = {
         else if (it.ItemStatus === "Cancel Requested") statusBadge = "badge-amber";
         else if (it.ItemStatus === "Cancelled") statusBadge = "badge-red";
 
-        const canCancel = (it.ItemStatus === "Pending" || it.ItemStatus === "Cooking");
+        const canCancel = (it.ItemStatus !== "Cancelled");
 
         return `
           <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px dashed #F1F5F9; font-size:13px;">
@@ -252,7 +265,7 @@ const WaiterModule = {
             </div>
             <div style="display:flex; align-items:center; gap:8px;">
               <span class="bubble-badge ${statusBadge}">${it.ItemStatus}</span>
-              ${canCancel ? `<button class="btn-bubble btn-bubble-danger btn-bubble-sm" style="padding:3px 8px; font-size:10px;" onclick="WaiterModule.promptCancelRequest(${it.OrderDetailID}, '${it.ItemName}')">Cancel</button>` : ''}
+              ${canCancel ? `<button class="btn-bubble btn-bubble-danger btn-bubble-sm" style="padding:3px 8px; font-size:10px;" onclick="WaiterModule.openCancelDishModal(${it.OrderDetailID}, '${it.ItemName.replace(/'/g, "\\'")}', '${it.ItemStatus}', ${it.Quantity})">Cancel Dish</button>` : ''}
             </div>
           </div>
         `;
@@ -275,6 +288,7 @@ const WaiterModule = {
 
         <div style="display:flex; gap:8px;">
           <button class="btn-bubble btn-bubble-secondary btn-bubble-sm" style="flex:1;" onclick="WaiterModule.openAddDishModal(${ord.OrderID})">+ Add Dish</button>
+          <button class="btn-bubble btn-bubble-danger btn-bubble-sm" style="flex:1;" onclick="WaiterModule.cancelEntireOrder(${ord.OrderID})">✕ Cancel Order</button>
           <button class="btn-bubble btn-bubble-primary btn-bubble-sm" style="flex:1;" onclick="WaiterModule.openCheckoutModal(${ord.OrderID}, ${ord.BillTotal})">Checkout Bill</button>
         </div>
       `;
@@ -282,31 +296,210 @@ const WaiterModule = {
     });
   },
 
-  promptCancelRequest(orderDetailId, dishName) {
-    const reason = prompt(`Enter reason for customer requesting cancellation of '${dishName}':\n(Will be routed to Chef for preparation consent)`);
-    if (!reason || !reason.trim()) return;
+  openCancelDishModal(orderDetailId, dishName, itemStatus, totalQty) {
+    const modal = document.getElementById("cancelDishModal");
+    if (!modal) {
+      this.cancelItemPrompt(orderDetailId, dishName, itemStatus, totalQty);
+      return;
+    }
 
-    App.apiFetch(`/api/waiter/order-details/${orderDetailId}/cancel-request`, {
-      method: "PUT",
-      body: { reason: reason.trim() }
-    }).then(res => {
-      App.showToast(res.message, "info");
-      this.fetchOrders();
-    }).catch(err => {
-      App.showToast("Cancellation request failed: " + err.message, "error");
-    });
+    document.getElementById("cancelDishDetailId").value = orderDetailId;
+    document.getElementById("cancelDishCurrentStatus").value = itemStatus;
+    document.getElementById("cancelDishTotalQty").value = totalQty;
+    document.getElementById("cancelDishName").textContent = dishName;
+
+    const statusBadge = document.getElementById("cancelDishStatusBadge");
+    if (statusBadge) {
+      statusBadge.textContent = `Status: ${itemStatus} • Ordered: ${totalQty} portion(s)`;
+    }
+
+    const notice = document.getElementById("cancelDishWasteNotice");
+    if (notice) {
+      if (itemStatus === "Pending" || itemStatus === "Cancel Requested") {
+        notice.style.background = "#EFF6FF";
+        notice.style.border = "1px solid #BFDBFE";
+        notice.style.color = "#1E40AF";
+        notice.innerHTML = `✓ <strong>Before Cooking (${itemStatus}):</strong> Cancelled portion(s) are restored to stock. No food is wasted or logged to Waste Log.`;
+      } else {
+        notice.style.background = "#FEF2F2";
+        notice.style.border = "1px solid #FECACA";
+        notice.style.color = "#991B1B";
+        notice.innerHTML = `⚠️ <strong>During/After Cooking (${itemStatus}):</strong> ONLY the cancelled portion(s) will be logged to Kitchen Waste Log with raw ingredient cost.`;
+      }
+    }
+
+    const qtyInput = document.getElementById("cancelDishQtyInput");
+    const qtyLabel = document.getElementById("cancelDishQtyLabel");
+    const qtyHelp = document.getElementById("cancelDishQtyHelp");
+    if (qtyInput) {
+      qtyInput.value = 1;
+      qtyInput.min = 1;
+      qtyInput.max = totalQty;
+    }
+    if (qtyLabel) {
+      qtyLabel.textContent = `Quantity to Cancel (1 to ${totalQty})`;
+    }
+    if (qtyHelp) {
+      qtyHelp.textContent = totalQty > 1
+        ? `Cancel partial portion(s)? Enter number between 1 and ${totalQty}.`
+        : `Cancelling the 1 ordered portion.`;
+    }
+
+    const reasonInput = document.getElementById("cancelDishReasonInput");
+    if (reasonInput) reasonInput.value = "";
+
+    modal.classList.add("open");
+  },
+
+  closeCancelDishModal() {
+    const modal = document.getElementById("cancelDishModal");
+    if (modal) modal.classList.remove("open");
+  },
+
+  async submitCancelDish() {
+    const detailId = parseInt(document.getElementById("cancelDishDetailId").value);
+    const totalQty = parseInt(document.getElementById("cancelDishTotalQty").value);
+    const itemStatus = document.getElementById("cancelDishCurrentStatus").value;
+    const qtyInput = document.getElementById("cancelDishQtyInput");
+    const cancelQty = qtyInput ? parseInt(qtyInput.value) : 1;
+    const reasonInput = document.getElementById("cancelDishReasonInput");
+    const userReason = reasonInput ? reasonInput.value.trim() : "";
+
+    if (isNaN(cancelQty) || cancelQty < 1 || cancelQty > totalQty) {
+      App.showToast(`Please enter a valid quantity between 1 and ${totalQty}.`, "error");
+      return;
+    }
+
+    const reason = userReason || `Cancelled by waiter (${itemStatus})`;
+
+    try {
+      const res = await App.apiFetch(`/api/waiter/order-details/${detailId}/cancel`, {
+        method: "POST",
+        body: {
+          reason: reason,
+          cancel_quantity: cancelQty
+        }
+      });
+      this.closeCancelDishModal();
+      App.showToast(res.message, res.logged_to_waste ? "warning" : "success");
+      await this.refresh();
+    } catch (err) {
+      App.showToast("Cancellation failed: " + err.message, "error");
+    }
+  },
+
+  async cancelItemPrompt(orderDetailId, dishName, itemStatus, totalQty) {
+    let cancelQty = 1;
+    if (totalQty > 1) {
+      const input = prompt(`How many portions of '${dishName}' to cancel? (1 to ${totalQty}):`, "1");
+      if (input === null) return;
+      cancelQty = parseInt(input);
+      if (isNaN(cancelQty) || cancelQty < 1 || cancelQty > totalQty) {
+        App.showToast(`Invalid quantity. Must be between 1 and ${totalQty}.`, "error");
+        return;
+      }
+    }
+
+    let confirmMsg = "";
+    if (itemStatus === "Pending") {
+      confirmMsg = `Cancel ${cancelQty} portion(s) of '${dishName}'?\n\n• Status: Before Cooking (Pending)\n• ${cancelQty} portion(s) will be restored to stock without food waste.`;
+    } else {
+      confirmMsg = `Cancel ${cancelQty} portion(s) of '${dishName}'?\n\n• Status: During/After Cooking (${itemStatus})\n• ONLY the cancelled ${cancelQty} portion(s) will be logged to Kitchen Waste Log.`;
+    }
+
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      const res = await App.apiFetch(`/api/waiter/order-details/${orderDetailId}/cancel`, {
+        method: "POST",
+        body: {
+          reason: `Cancelled by waiter (${itemStatus})`,
+          cancel_quantity: cancelQty
+        }
+      });
+      App.showToast(res.message, res.logged_to_waste ? "warning" : "success");
+      await this.refresh();
+    } catch (err) {
+      App.showToast("Item cancellation failed: " + err.message, "error");
+    }
+  },
+
+  async cancelItem(orderDetailId, dishName, itemStatus, totalQty = 1) {
+    return this.openCancelDishModal(orderDetailId, dishName, itemStatus, totalQty);
+  },
+
+  async cancelEntireOrder(orderId) {
+    const ord = this.activeOrders.find(o => o.OrderID === orderId);
+    if (!ord) return;
+
+    const cookingOrReady = ord.items.filter(it => it.ItemStatus === "Cooking" || it.ItemStatus === "Ready");
+    const beforeCooking = ord.items.filter(it => it.ItemStatus === "Pending" || it.ItemStatus === "Cancel Requested");
+
+    let confirmMsg = `Cancel Entire Order #${orderId}?\n\n`;
+    if (cookingOrReady.length > 0) {
+      confirmMsg += `⚠️ ${cookingOrReady.length} dish(es) during/after cooking will be sent to the Kitchen Waste Log.\n`;
+    }
+    if (beforeCooking.length > 0) {
+      confirmMsg += `✓ ${beforeCooking.length} dish(es) before cooking will be cancelled without waste.\n`;
+    }
+    confirmMsg += `✓ Assigned Table(s) ${ord.tables.join(", ")} will be freed immediately.\n\nProceed with cancellation?`;
+
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      const res = await App.apiFetch(`/api/waiter/orders/${orderId}/cancel`, {
+        method: "POST",
+        body: { reason: "Customer cancelled entire order" }
+      });
+      App.showToast(res.message, res.wasted_items && res.wasted_items.length > 0 ? "warning" : "success");
+      await this.refresh();
+    } catch (err) {
+      App.showToast("Order cancellation failed: " + err.message, "error");
+    }
+  },
+
+  promptCancelRequest(orderDetailId, dishName) {
+    return this.cancelItem(orderDetailId, dishName, "Cooking");
   },
 
   openAddDishModal(orderId) {
     const sel = document.getElementById("addDishSelect");
     if (!sel) return;
     sel.innerHTML = "";
-    this.menu.filter(m => m.IsAvailable).forEach(m => {
+
+    const availableDishes = this.menu.filter(m => m.IsAvailable && (m.StockQuantity === undefined || m.StockQuantity > 0));
+
+    if (availableDishes.length === 0) {
       const opt = document.createElement("option");
-      opt.value = m.MenuItemID;
-      opt.textContent = `${m.ItemName} (Rs.${m.Price.toFixed(2)})`;
+      opt.value = "";
+      opt.textContent = "No dishes currently in stock";
       sel.appendChild(opt);
-    });
+    } else {
+      availableDishes.forEach(m => {
+        const opt = document.createElement("option");
+        opt.value = m.MenuItemID;
+        const stockText = typeof m.StockQuantity === "number" ? ` - ${m.StockQuantity} in stock` : "";
+        opt.textContent = `${m.ItemName} (Rs.${m.Price.toFixed(2)}${stockText})`;
+        sel.appendChild(opt);
+      });
+    }
+
+    const qtyInput = document.getElementById("addDishQtyInput");
+    if (qtyInput) {
+      qtyInput.value = 1;
+      const firstDish = availableDishes[0];
+      if (firstDish && typeof firstDish.StockQuantity === "number") {
+        qtyInput.max = firstDish.StockQuantity;
+      }
+    }
+
+    sel.onchange = () => {
+      const selectedId = parseInt(sel.value);
+      const chosen = availableDishes.find(d => d.MenuItemID === selectedId);
+      if (chosen && typeof chosen.StockQuantity === "number" && qtyInput) {
+        qtyInput.max = chosen.StockQuantity;
+      }
+    };
 
     document.getElementById("addDishOrderId").value = orderId;
     document.getElementById("addDishModal").classList.add("open");
@@ -317,6 +510,17 @@ const WaiterModule = {
     const menuId = parseInt(document.getElementById("addDishSelect").value);
     const qty = parseInt(document.getElementById("addDishQtyInput").value || 1);
 
+    if (!menuId) {
+      App.showToast("Please select an available dish from the menu.", "error");
+      return;
+    }
+
+    const dish = this.menu.find(m => m.MenuItemID === menuId);
+    if (dish && typeof dish.StockQuantity === "number" && qty > dish.StockQuantity) {
+      App.showToast(`Insufficient stock! Only ${dish.StockQuantity} portion(s) available for '${dish.ItemName}'.`, "error");
+      return;
+    }
+
     try {
       const res = await App.apiFetch(`/api/waiter/orders/${orderId}/items`, {
         method: "POST",
@@ -324,7 +528,7 @@ const WaiterModule = {
       });
       App.showToast(`Added ${qty}x ${res.item_name} to Order #${orderId}!`, "success");
       document.getElementById("addDishModal").classList.remove("open");
-      await this.fetchOrders();
+      await this.refresh();
     } catch (e) {
       App.showToast("Failed to add dish: " + e.message, "error");
     }
