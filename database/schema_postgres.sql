@@ -7,9 +7,42 @@
 --   - ACID Transactions & Row-Level Locking (Jim Gray)
 -- =====================================================================
 
-DROP SCHEMA IF EXISTS restaurant CASCADE;
-CREATE SCHEMA restaurant;
-SET search_path TO restaurant, public;
+-- Clean up existing views and tables if rebuilding
+DROP VIEW IF EXISTS View_Monthly_Profit_Loss CASCADE;
+DROP VIEW IF EXISTS View_Daily_Waiter_Collections CASCADE;
+DROP VIEW IF EXISTS View_Chef_Performance CASCADE;
+DROP VIEW IF EXISTS View_Waiter_Performance CASCADE;
+
+DROP TABLE IF EXISTS Purchase_Expenses CASCADE;
+DROP TABLE IF EXISTS Waste_Log CASCADE;
+DROP TABLE IF EXISTS Feedback CASCADE;
+DROP TABLE IF EXISTS Order_Details CASCADE;
+DROP TABLE IF EXISTS Order_Tables CASCADE;
+DROP TABLE IF EXISTS Orders CASCADE;
+DROP TABLE IF EXISTS Tables CASCADE;
+DROP TABLE IF EXISTS Menu_Requests CASCADE;
+DROP TABLE IF EXISTS Shortage_Logs CASCADE;
+DROP TABLE IF EXISTS Inventory CASCADE;
+DROP TABLE IF EXISTS Menu_Items CASCADE;
+DROP TABLE IF EXISTS Users CASCADE;
+DROP TABLE IF EXISTS Staff CASCADE;
+DROP TABLE IF EXISTS Roles CASCADE;
+
+-- Polyfill GROUP_CONCAT for seamless PostgreSQL compatibility with SQLite queries
+CREATE OR REPLACE FUNCTION _pg_group_concat_accum(state text, val anyelement)
+RETURNS text AS $$
+BEGIN
+    IF val IS NULL THEN RETURN state; END IF;
+    IF state IS NULL THEN RETURN val::text; END IF;
+    RETURN state || ',' || val::text;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+DROP AGGREGATE IF EXISTS GROUP_CONCAT(anyelement);
+CREATE AGGREGATE GROUP_CONCAT(anyelement) (
+    SFUNC = _pg_group_concat_accum,
+    STYPE = text
+);
 
 -- =====================================================================
 -- SECTION A: Personnel & Security (RBAC)

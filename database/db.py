@@ -10,18 +10,198 @@ Enforces:
 """
 
 import os
+import re
 import sqlite3
 from typing import List, Dict, Any, Optional
 from contextlib import contextmanager
 
+try:
+    import psycopg2
+    import psycopg2.extras
+except ImportError:
+    psycopg2 = None
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.path.join(BASE_DIR, "restaurant.db")
 SCHEMA_SQL_PATH = os.path.join(BASE_DIR, "database", "schema_sqlite.sql")
+PG_SCHEMA_SQL_PATH = os.path.join(BASE_DIR, "database", "schema_postgres.sql")
 SEED_SQL_PATH = os.path.join(BASE_DIR, "database", "seed_data.sql")
 
+DATABASE_URL = os.getenv("DATABASE_URL")
+if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-def get_connection() -> sqlite3.Connection:
-    """Creates a connection to SQLite with foreign keys and dict row factory enabled."""
+IS_POSTGRES = bool(DATABASE_URL)
+
+TABLE_PRIMARY_KEYS = {
+    "staff": "employeeid",
+    "users": "userid",
+    "menu_requests": "requestid",
+    "inventory": "ingredientid",
+    "purchase_expenses": "expenseid",
+    "orders": "orderid",
+    "order_details": "orderdetailid",
+    "waste_log": "wasteid",
+    "feedback": "feedbackid",
+    "menu_items": "menuitemid",
+    "shortage_logs": "logid",
+}
+
+
+class PgRow(dict):
+    """Row wrapper that provides case-insensitive key access and integer index access."""
+    def __init__(self, cols, values):
+        super().__init__()
+        self._values = list(values)
+        self._col_map = {}
+        for idx, col in enumerate(cols):
+            self._col_map[col.lower()] = col
+            dict.__setitem__(self, col, values[idx])
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return self._values[key]
+        if isinstance(key, str):
+            lower_k = key.lower()
+            if lower_k in self._col_map:
+                return dict.__getitem__(self, self._col_map[lower_k])
+        return super().__getitem__(key)
+
+    def get(self, key, default=None):
+        if isinstance(key, str) and key.lower() in self._col_map:
+            return dict.__getitem__(self, self._col_map[key.lower()])
+        return super().get(key, default)
+
+
+class PgCursor:
+    """Cursor wrapper translating DB-API queries from SQLite style (?) to PostgreSQL (%s)."""
+    def __init__(self, raw_cursor, conn):
+        self._cursor = raw_cursor
+        self._conn = conn
+        self.lastrowid = None
+
+    def execute(self, sql: str, params: Any = None):
+        clean_sql = sql.strip()
+        # Convert SQLite GROUP_CONCAT to PostgreSQL STRING_AGG if needed
+        if "GROUP_CONCAT" in clean_sql.upper():
+            clean_sql = re.sub(
+                r'GROUP_CONCAT\s*\(\s*DISTINCT\s+([^)]+)\)',
+                r"STRING_AGG(DISTINCT \1::text, ',')",
+                clean_sql,
+                flags=re.IGNORECASE
+            )
+            clean_sql = re.sub(
+                r'GROUP_CONCAT\s*\(\s*([^)]+)\)',
+                r"STRING_AGG(\1::text, ',')",
+                clean_sql,
+                flags=re.IGNORECASE
+            )
+
+        # Convert ? placeholders to %s for PostgreSQL
+        if params is not None:
+            clean_sql = clean_sql.replace("?", "%s")
+
+        # Automatically capture generated serial primary key via RETURNING
+        upper_sql = clean_sql.upper()
+        if upper_sql.startswith("INSERT INTO") and "RETURNING" not in upper_sql:
+            m = re.search(r"INSERT\s+INTO\s+([a-zA-Z0-9_]+)", clean_sql, re.IGNORECASE)
+            if m:
+                tbl = m.group(1).lower()
+                if tbl in TABLE_PRIMARY_KEYS:
+                    pk_col = TABLE_PRIMARY_KEYS[tbl]
+                    clean_sql = clean_sql.rstrip("; \t\n\r") + f" RETURNING {pk_col};"
+                    if params is not None:
+                        self._cursor.execute(clean_sql, params)
+                    else:
+                        self._cursor.execute(clean_sql)
+                    row = self._cursor.fetchone()
+                    if row:
+                        self.lastrowid = row[0]
+                    return self
+
+        if params is not None:
+            self._cursor.execute(clean_sql, params)
+        else:
+            self._cursor.execute(clean_sql)
+        return self
+
+    def fetchone(self):
+        if self._cursor.description is None:
+            return None
+        row = self._cursor.fetchone()
+        if row is None:
+            return None
+        col_names = [desc[0] for desc in self._cursor.description]
+        return PgRow(col_names, row)
+
+    def fetchall(self):
+        if self._cursor.description is None:
+            return []
+        rows = self._cursor.fetchall()
+        if not rows:
+            return []
+        col_names = [desc[0] for desc in self._cursor.description]
+        return [PgRow(col_names, r) for r in rows]
+
+    def close(self):
+        self._cursor.close()
+
+    @property
+    def rowcount(self):
+        return self._cursor.rowcount
+
+    @property
+    def description(self):
+        return self._cursor.description
+
+    def __iter__(self):
+        if self._cursor.description is None:
+            return iter([])
+        col_names = [desc[0] for desc in self._cursor.description]
+        for r in self._cursor:
+            yield PgRow(col_names, r)
+
+
+class PgConnection:
+    """Connection wrapper for PostgreSQL exposing SQLite-compatible interfaces."""
+    def __init__(self, raw_conn):
+        self._conn = raw_conn
+
+    def cursor(self):
+        return PgCursor(self._conn.cursor(), self)
+
+    def execute(self, sql: str, params: Any = None):
+        cur = self.cursor()
+        cur.execute(sql, params)
+        return cur
+
+    def commit(self):
+        self._conn.commit()
+
+    def rollback(self):
+        self._conn.rollback()
+
+    def close(self):
+        self._conn.close()
+
+    def executescript(self, script: str):
+        with self._conn.cursor() as cur:
+            cur.execute(script)
+        self._conn.commit()
+
+
+def get_connection():
+    """
+    Creates a connection to the active database engine:
+    - PostgreSQL (Neon / Supabase / Render Postgres) when DATABASE_URL is set in environment.
+    - SQLite (restaurant.db) when running locally without DATABASE_URL.
+    """
+    if IS_POSTGRES:
+        if not psycopg2:
+            raise RuntimeError("psycopg2-binary is not installed. Please add it to requirements.txt")
+        raw = psycopg2.connect(DATABASE_URL)
+        return PgConnection(raw)
+
     conn = sqlite3.connect(DB_PATH, timeout=20.0, check_same_thread=False)
     conn.execute("PRAGMA foreign_keys = ON;")
     conn.row_factory = sqlite3.Row
@@ -33,7 +213,8 @@ def transaction():
     """ACID Transaction context manager with automatic commit and rollback."""
     conn = get_connection()
     try:
-        conn.execute("BEGIN IMMEDIATE;")
+        if not IS_POSTGRES:
+            conn.execute("BEGIN IMMEDIATE;")
         yield conn
         conn.commit()
     except Exception as e:
@@ -44,7 +225,57 @@ def transaction():
 
 
 def init_db(force_reset: bool = False):
-    """Initializes the database schema and seeds initial data if not present."""
+    """
+    Initializes the database schema and seeds initial dataset.
+    Automatically handles PostgreSQL (cloud) and SQLite (local) dialects.
+    """
+    if IS_POSTGRES:
+        conn = get_connection()
+        cursor = conn.cursor()
+        # Check if Roles table exists in PostgreSQL
+        cursor.execute("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_schema = 'public' AND table_name = 'roles'
+            );
+        """)
+        exists_row = cursor.fetchone()
+        exists = bool(exists_row and exists_row[0])
+
+        if not exists or force_reset:
+            print("[Database] Initializing PostgreSQL 3NF schema...")
+            with open(PG_SCHEMA_SQL_PATH, "r", encoding="utf-8") as f:
+                schema_script = f.read()
+            conn.executescript(schema_script)
+
+            print("[Database] Seeding initial dataset into PostgreSQL...")
+            with open(SEED_SQL_PATH, "r", encoding="utf-8") as f:
+                seed_script = f.read()
+            conn.executescript(seed_script)
+
+            # Align auto-increment sequences with pre-seeded explicit IDs
+            seq_sync_sql = """
+                SELECT setval(pg_get_serial_sequence('roles', 'roleid'), COALESCE(MAX(roleid), 1)) FROM roles;
+                SELECT setval(pg_get_serial_sequence('staff', 'employeeid'), COALESCE(MAX(employeeid), 1)) FROM staff;
+                SELECT setval(pg_get_serial_sequence('users', 'userid'), COALESCE(MAX(userid), 1)) FROM users;
+                SELECT setval(pg_get_serial_sequence('menu_items', 'menuitemid'), COALESCE(MAX(menuitemid), 1)) FROM menu_items;
+                SELECT setval(pg_get_serial_sequence('inventory', 'ingredientid'), COALESCE(MAX(ingredientid), 1)) FROM inventory;
+                SELECT setval(pg_get_serial_sequence('shortage_logs', 'logid'), COALESCE(MAX(logid), 1)) FROM shortage_logs;
+                SELECT setval(pg_get_serial_sequence('menu_requests', 'requestid'), COALESCE(MAX(requestid), 1)) FROM menu_requests;
+                SELECT setval(pg_get_serial_sequence('orders', 'orderid'), COALESCE(MAX(orderid), 1)) FROM orders;
+                SELECT setval(pg_get_serial_sequence('order_details', 'orderdetailid'), COALESCE(MAX(orderdetailid), 1)) FROM order_details;
+                SELECT setval(pg_get_serial_sequence('feedback', 'feedbackid'), COALESCE(MAX(feedbackid), 1)) FROM feedback;
+                SELECT setval(pg_get_serial_sequence('purchase_expenses', 'expenseid'), COALESCE(MAX(expenseid), 1)) FROM purchase_expenses;
+                SELECT setval(pg_get_serial_sequence('waste_log', 'wasteid'), COALESCE(MAX(wasteid), 1)) FROM waste_log;
+            """
+            conn.executescript(seq_sync_sql)
+            print("[Database] PostgreSQL schema, seed data, and sequences successfully loaded.")
+        else:
+            print("[Database] PostgreSQL tables already initialized and persistent.")
+        conn.close()
+        return
+
+    # Local SQLite Initialization
     if force_reset and os.path.exists(DB_PATH):
         try:
             os.remove(DB_PATH)
@@ -53,6 +284,24 @@ def init_db(force_reset: bool = False):
 
     conn = get_connection()
     cursor = conn.cursor()
+
+    if force_reset:
+        cursor.execute("PRAGMA foreign_keys = OFF;")
+        drop_tables = [
+            "Purchase_Expenses", "Waste_Log", "Feedback", "Order_Details",
+            "Order_Tables", "Orders", "Tables", "Menu_Requests", "Shortage_Logs",
+            "Inventory", "Menu_Items", "Users", "Staff", "Roles"
+        ]
+        for tbl in drop_tables:
+            cursor.execute(f"DROP TABLE IF EXISTS {tbl};")
+        drop_views = [
+            "View_Monthly_Profit_Loss", "View_Daily_Waiter_Collections",
+            "View_Chef_Performance", "View_Waiter_Performance"
+        ]
+        for vw in drop_views:
+            cursor.execute(f"DROP VIEW IF EXISTS {vw};")
+        cursor.execute("PRAGMA foreign_keys = ON;")
+        conn.commit()
 
     # Check if Roles table exists
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Roles';")

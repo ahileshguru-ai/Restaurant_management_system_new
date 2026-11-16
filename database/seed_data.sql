@@ -11,12 +11,12 @@ INSERT INTO Roles (RoleID, RoleName) VALUES
 
 -- 2. Staff
 INSERT INTO Staff (EmployeeID, Name, RoleID, Role, Shift, IsActive, Salary) VALUES
-(1, 'Ramesh Sharma', 1, 'Shop Manager', 'General Shift', 1, 65000.00),
-(2, 'Ananya Deshmukh', 2, 'Kitchen Manager', 'Morning Shift', 1, 48000.00),
-(3, 'Chef Vikram Roy', 3, 'Chef', 'Morning Shift', 1, 40000.00),
-(4, 'Chef Meera Sen', 3, 'Chef', 'Evening Shift', 1, 42000.00),
-(5, 'Rahul Varma', 4, 'Waiter', 'Morning Shift', 1, 24000.00),
-(6, 'Priya Nair', 4, 'Waiter', 'Evening Shift', 1, 24000.00);
+(1, 'Ramesh Sharma', 1, 'Shop Manager', 'General Shift', TRUE, 65000.00),
+(2, 'Ananya Deshmukh', 2, 'Kitchen Manager', 'Morning Shift', TRUE, 48000.00),
+(3, 'Chef Vikram Roy', 3, 'Chef', 'Morning Shift', TRUE, 40000.00),
+(4, 'Chef Meera Sen', 3, 'Chef', 'Evening Shift', TRUE, 42000.00),
+(5, 'Rahul Varma', 4, 'Waiter', 'Morning Shift', TRUE, 24000.00),
+(6, 'Priya Nair', 4, 'Waiter', 'Evening Shift', TRUE, 24000.00);
 
 -- 3. Users (Passwords hashed via bcrypt: manager123, kitchen123, chef123, waiter123)
 INSERT INTO Users (UserID, EmployeeID, Username, PasswordHash, RoleID) VALUES
@@ -42,25 +42,25 @@ INSERT INTO Tables (TableNumber, SeatingCapacity, CurrentStatus) VALUES
 -- Chef 3 (Vikram) specializes in South Indian & Curries
 -- Chef 4 (Meera) specializes in Biryani & Breads
 INSERT INTO Menu_Items (MenuItemID, ItemName, Category, Price, StockQuantity, IsAvailable, AssignedChefID) VALUES
-(1, 'Crispy Masala Dosa', 'South Indian', 130.00, 15, 1, 3),
-(2, 'Ghee Roast Dosa', 'South Indian', 160.00, 12, 1, 3),
-(3, 'Medu Vada (2 Pcs)', 'South Indian', 90.00, 10, 1, 3),
-(4, 'Hyderabadi Chicken Biryani', 'Biryani', 290.00, 20, 1, 4),
-(5, 'Royal Mutton Biryani', 'Biryani', 360.00, 15, 1, 4),
-(6, 'Paneer Butter Masala', 'Curries', 240.00, 12, 1, 3),
-(7, 'Dal Makhani Slow-Cooked', 'Curries', 210.00, 14, 1, 4),
-(8, 'Butter Garlic Naan', 'Breads', 65.00, 25, 1, 4),
-(9, 'Steamed Idly (2 Pcs)', 'South Indian', 70.00, 10, 1, 3);
+(1, 'Crispy Masala Dosa', 'South Indian', 130.00, 15, TRUE, 3),
+(2, 'Ghee Roast Dosa', 'South Indian', 160.00, 12, TRUE, 3),
+(3, 'Medu Vada (2 Pcs)', 'South Indian', 90.00, 10, TRUE, 3),
+(4, 'Hyderabadi Chicken Biryani', 'Biryani', 290.00, 20, TRUE, 4),
+(5, 'Royal Mutton Biryani', 'Biryani', 360.00, 15, TRUE, 4),
+(6, 'Paneer Butter Masala', 'Curries', 240.00, 12, TRUE, 3),
+(7, 'Dal Makhani Slow-Cooked', 'Curries', 210.00, 14, TRUE, 4),
+(8, 'Butter Garlic Naan', 'Breads', 65.00, 25, TRUE, 4),
+(9, 'Steamed Idly (2 Pcs)', 'South Indian', 70.00, 10, TRUE, 3);
 
 -- 6. Inventory (AssignedChefID: 3 = Chef Vikram [South Indian/Curries], 4 = Chef Meera [Biryani/Breads])
 INSERT INTO Inventory (IngredientID, IngredientName, NeedsRestock, AssignedChefID, ReportedBy_ChefID, LastUpdated) VALUES
-(1, 'Fermented Dosa Batter (kg)', 0, 3, 3, CURRENT_TIMESTAMP),
-(2, 'Aged Basmati Rice (kg)', 0, 4, 4, CURRENT_TIMESTAMP),
-(3, 'Fresh Cottage Cheese / Paneer (kg)', 0, 3, 3, CURRENT_TIMESTAMP),
-(4, 'Farm Fresh Chicken (kg)', 0, 4, 4, CURRENT_TIMESTAMP),
-(5, 'Pure Desi Ghee (Litre)', 0, 3, 3, CURRENT_TIMESTAMP),
-(6, 'Royal Biryani Whole Spices Pack', 0, 4, 4, CURRENT_TIMESTAMP),
-(7, 'Organic Dairy Cooking Cream (kg)', 0, 4, 4, CURRENT_TIMESTAMP);
+(1, 'Fermented Dosa Batter (kg)', FALSE, 3, 3, CURRENT_TIMESTAMP),
+(2, 'Aged Basmati Rice (kg)', FALSE, 4, 4, CURRENT_TIMESTAMP),
+(3, 'Fresh Cottage Cheese / Paneer (kg)', FALSE, 3, 3, CURRENT_TIMESTAMP),
+(4, 'Farm Fresh Chicken (kg)', FALSE, 4, 4, CURRENT_TIMESTAMP),
+(5, 'Pure Desi Ghee (Litre)', FALSE, 3, 3, CURRENT_TIMESTAMP),
+(6, 'Royal Biryani Whole Spices Pack', FALSE, 4, 4, CURRENT_TIMESTAMP),
+(7, 'Organic Dairy Cooking Cream (kg)', FALSE, 4, 4, CURRENT_TIMESTAMP);
 
 -- 7. Shortage Logs
 INSERT INTO Shortage_Logs (LogID, MenuItemID, ChefID, Reason, LogTimestamp) VALUES
