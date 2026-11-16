@@ -20,12 +20,12 @@ INSERT INTO Staff (EmployeeID, Name, RoleID, Role, Shift, IsActive, Salary) VALU
 
 -- 3. Users (Passwords hashed via bcrypt: manager123, kitchen123, chef123, waiter123)
 INSERT INTO Users (UserID, EmployeeID, Username, PasswordHash, RoleID) VALUES
-(1, 1, 'shopmanager', '$2b$12$B7us46gZPWgZFd9rHFArQOpI2wEKk6cXrceEnwynFrhmyi.y0PwkC', 1),
-(2, 2, 'kitchenmgr', '$2b$12$ODj.XlRzEtW.VShGaZyWluVBu00zDsD2QC/JSQFnegujlq02d9E8y', 2),
-(3, 3, 'chef_vikram', '$2b$12$y6lAqQX1MgmGUzmdfKw4aOfOHH4E1tcco60h3z9ygmRZD84HvJ8Bi', 3),
-(4, 4, 'chef_meera', '$2b$12$y6lAqQX1MgmGUzmdfKw4aOfOHH4E1tcco60h3z9ygmRZD84HvJ8Bi', 3),
-(5, 5, 'waiter_rahul', '$2b$12$So4/biFFYVUbiXiXCdB9XOQ43owzI8alDP7E65Ni/Q9Z2vZcUNXku', 4),
-(6, 6, 'waiter_priya', '$2b$12$So4/biFFYVUbiXiXCdB9XOQ43owzI8alDP7E65Ni/Q9Z2vZcUNXku', 4);
+(1, 1, 'shopmanager', '$2b$12$emFziUmmHFcmpJcofB9bFuzIQqqEpYXfnLU4IjeEJXI6Lbi0TbZ9S', 1),
+(2, 2, 'kitchenmgr', '$2b$12$Sz1Pm5Q/Mb4DEDNCokgWYew14ZS0OH.Cw6W9zLKcoYoO/dEfBK8s6', 2),
+(3, 3, 'chef_vikram', '$2b$12$AcxMwlXLVtzkmprY2zufOONmJCxN97lqr1NZEhTZmDB0ZnHDxUZ1q', 3),
+(4, 4, 'chef_meera', '$2b$12$mZX8tFTbik.Gk.4ndvfswOAeuMnuWmrVj11.RrWWAZtqJsTF6NyJm', 3),
+(5, 5, 'waiter_rahul', '$2b$12$DI1Hu.HyGCvJpp/7k72UKOAdsNF7shokinRHO0d4XYSxyTxFW3Sr6', 4),
+(6, 6, 'waiter_priya', '$2b$12$nH47gatl/jgxL.uuN0Cg8u5Urxm3DMdkJjDGxhWE9vxrQLsdoOBSe', 4);
 
 -- 4. Tables
 INSERT INTO Tables (TableNumber, SeatingCapacity, CurrentStatus) VALUES

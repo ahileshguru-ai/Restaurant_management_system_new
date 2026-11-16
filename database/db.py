@@ -229,6 +229,18 @@ def init_db(force_reset: bool = False):
     Initializes the database schema and seeds initial dataset.
     Automatically handles PostgreSQL (cloud) and SQLite (local) dialects.
     """
+    if os.getenv("RESET_DB", "").lower() in ("true", "1"):
+        force_reset = True
+
+    DEFAULT_USER_CREDENTIALS = {
+        'shopmanager': ('manager123', '$2b$12$emFziUmmHFcmpJcofB9bFuzIQqqEpYXfnLU4IjeEJXI6Lbi0TbZ9S'),
+        'kitchenmgr': ('kitchen123', '$2b$12$Sz1Pm5Q/Mb4DEDNCokgWYew14ZS0OH.Cw6W9zLKcoYoO/dEfBK8s6'),
+        'chef_vikram': ('chef123', '$2b$12$AcxMwlXLVtzkmprY2zufOONmJCxN97lqr1NZEhTZmDB0ZnHDxUZ1q'),
+        'chef_meera': ('chef123', '$2b$12$mZX8tFTbik.Gk.4ndvfswOAeuMnuWmrVj11.RrWWAZtqJsTF6NyJm'),
+        'waiter_rahul': ('waiter123', '$2b$12$DI1Hu.HyGCvJpp/7k72UKOAdsNF7shokinRHO0d4XYSxyTxFW3Sr6'),
+        'waiter_priya': ('waiter123', '$2b$12$nH47gatl/jgxL.uuN0Cg8u5Urxm3DMdkJjDGxhWE9vxrQLsdoOBSe'),
+    }
+
     if IS_POSTGRES:
         conn = get_connection()
         cursor = conn.cursor()
@@ -272,6 +284,32 @@ def init_db(force_reset: bool = False):
             print("[Database] PostgreSQL schema, seed data, and sequences successfully loaded.")
         else:
             print("[Database] PostgreSQL tables already initialized and persistent.")
+
+        # Ensure demo user accounts have valid bcrypt hashes in PostgreSQL
+        try:
+            cursor.execute("SELECT UserID, Username, PasswordHash FROM Users;")
+            existing_pg_users = {row["Username"]: row for row in cursor.fetchall()}
+            if not existing_pg_users:
+                print("[Database] Users table was empty in PostgreSQL. Seeding dataset...")
+                with open(SEED_SQL_PATH, "r", encoding="utf-8") as f:
+                    seed_script = f.read()
+                conn.executescript(seed_script)
+            else:
+                import bcrypt
+                for uname, (plain_pw, valid_hash) in DEFAULT_USER_CREDENTIALS.items():
+                    if uname in existing_pg_users:
+                        cur_h = existing_pg_users[uname]["PasswordHash"]
+                        try:
+                            ok = bcrypt.checkpw(plain_pw.encode('utf-8'), cur_h.encode('utf-8'))
+                        except Exception:
+                            ok = False
+                        if not ok:
+                            print(f"[Database] Repairing password hash for '{uname}' in PostgreSQL...")
+                            cursor.execute("UPDATE Users SET PasswordHash = ? WHERE Username = ?;", (valid_hash, uname))
+                            conn.commit()
+        except Exception as e:
+            print(f"[Database] Warning during PostgreSQL user verification: {e}")
+
         conn.close()
         return
 
@@ -419,6 +457,25 @@ def init_db(force_reset: bool = False):
             LIMIT ?;
         """, (missing_count,))
         conn.commit()
+
+    # Ensure demo user accounts have valid bcrypt hashes in SQLite
+    try:
+        import bcrypt
+        cursor.execute("SELECT UserID, Username, PasswordHash FROM Users;")
+        for u in cursor.fetchall():
+            uname = u["Username"]
+            cur_h = u["PasswordHash"]
+            if uname in DEFAULT_USER_CREDENTIALS:
+                plain_pw, valid_hash = DEFAULT_USER_CREDENTIALS[uname]
+                try:
+                    ok = bcrypt.checkpw(plain_pw.encode('utf-8'), cur_h.encode('utf-8'))
+                except Exception:
+                    ok = False
+                if not ok:
+                    cursor.execute("UPDATE Users SET PasswordHash = ? WHERE Username = ?;", (valid_hash, uname))
+        conn.commit()
+    except Exception as e:
+        print(f"[Database] Warning during SQLite user verification: {e}")
 
     conn.close()
 
