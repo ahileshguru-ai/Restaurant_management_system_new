@@ -317,11 +317,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trg_precooking_edit_block
-BEFORE UPDATE OR DELETE ON Order_Details
-FOR EACH ROW
-EXECUTE FUNCTION fn_block_precooking_edit();
-
 -- =====================================================================
 -- SECTION G: Automated Waste Log to Expenses Synchronization Trigger
 -- =====================================================================
@@ -336,8 +331,3 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_sync_wastelog_to_expenses
-AFTER INSERT ON Waste_Log
-FOR EACH ROW
-EXECUTE FUNCTION fn_sync_wastelog_to_expenses();

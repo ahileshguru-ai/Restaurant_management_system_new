@@ -304,7 +304,23 @@ def init_db(force_reset: bool = False):
                 SELECT setval(pg_get_serial_sequence('waste_log', 'wasteid'), COALESCE(MAX(wasteid), 1)) FROM waste_log;
             """
             conn.executescript(seq_sync_sql)
-            print("[Database] PostgreSQL schema, seed data, and sequences successfully loaded.")
+
+            # Create triggers after seed data is loaded and sequences are aligned
+            triggers_sql = """
+                DROP TRIGGER IF EXISTS trg_precooking_edit_block ON Order_Details;
+                CREATE TRIGGER trg_precooking_edit_block
+                BEFORE UPDATE OR DELETE ON Order_Details
+                FOR EACH ROW
+                EXECUTE FUNCTION fn_block_precooking_edit();
+
+                DROP TRIGGER IF EXISTS trg_sync_wastelog_to_expenses ON Waste_Log;
+                CREATE TRIGGER trg_sync_wastelog_to_expenses
+                AFTER INSERT ON Waste_Log
+                FOR EACH ROW
+                EXECUTE FUNCTION fn_sync_wastelog_to_expenses();
+            """
+            conn.executescript(triggers_sql)
+            print("[Database] PostgreSQL schema, seed data, sequences, and triggers successfully loaded.")
         else:
             print("[Database] PostgreSQL tables already initialized and persistent.")
             # Apply non-destructive column migrations on existing DB if needed
@@ -316,6 +332,24 @@ def init_db(force_reset: bool = False):
                 conn.commit()
             except Exception:
                 conn.rollback()
+
+            # Ensure triggers are active
+            try:
+                conn.executescript("""
+                    DROP TRIGGER IF EXISTS trg_precooking_edit_block ON Order_Details;
+                    CREATE TRIGGER trg_precooking_edit_block
+                    BEFORE UPDATE OR DELETE ON Order_Details
+                    FOR EACH ROW
+                    EXECUTE FUNCTION fn_block_precooking_edit();
+
+                    DROP TRIGGER IF EXISTS trg_sync_wastelog_to_expenses ON Waste_Log;
+                    CREATE TRIGGER trg_sync_wastelog_to_expenses
+                    AFTER INSERT ON Waste_Log
+                    FOR EACH ROW
+                    EXECUTE FUNCTION fn_sync_wastelog_to_expenses();
+                """)
+            except Exception as e:
+                print(f"[Database] Notice on trigger setup: {e}")
 
         # Ensure demo user accounts have valid bcrypt hashes in PostgreSQL
         try:
