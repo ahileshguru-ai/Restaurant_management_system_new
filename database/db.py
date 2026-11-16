@@ -48,15 +48,109 @@ TABLE_PRIMARY_KEYS = {
 }
 
 
+CANONICAL_COLUMNS = {
+    "userid": "UserID",
+    "employeeid": "EmployeeID",
+    "username": "Username",
+    "passwordhash": "PasswordHash",
+    "roleid": "RoleID",
+    "rolename": "RoleName",
+    "name": "Name",
+    "staffname": "StaffName",
+    "role": "Role",
+    "shift": "Shift",
+    "isactive": "IsActive",
+    "salary": "Salary",
+    "menuitemid": "MenuItemID",
+    "itemname": "ItemName",
+    "category": "Category",
+    "price": "Price",
+    "stockquantity": "StockQuantity",
+    "isavailable": "IsAvailable",
+    "assignedchefid": "AssignedChefID",
+    "ingredientid": "IngredientID",
+    "ingredientname": "IngredientName",
+    "needsrestock": "NeedsRestock",
+    "reportedby_chefid": "ReportedBy_ChefID",
+    "lastupdated": "LastUpdated",
+    "logid": "LogID",
+    "reason": "Reason",
+    "logtimestamp": "LogTimestamp",
+    "requestid": "RequestID",
+    "chefid": "ChefID",
+    "dishname": "DishName",
+    "requesttype": "RequestType",
+    "status": "Status",
+    "createdat": "CreatedAt",
+    "tablenumber": "TableNumber",
+    "seatingcapacity": "SeatingCapacity",
+    "currentstatus": "CurrentStatus",
+    "orderid": "OrderID",
+    "waiterid": "WaiterID",
+    "customercount": "CustomerCount",
+    "ordertimestamp": "OrderTimestamp",
+    "cashamount": "CashAmount",
+    "upiamount": "UPIAmount",
+    "orderstatus": "OrderStatus",
+    "orderdetailid": "OrderDetailID",
+    "quantity": "Quantity",
+    "unitprice": "UnitPrice",
+    "subtotal": "Subtotal",
+    "preparedby_employeeid": "PreparedBy_EmployeeID",
+    "itemstatus": "ItemStatus",
+    "cancellationreason": "CancellationReason",
+    "feedbackid": "FeedbackID",
+    "customername": "CustomerName",
+    "phonenumber": "PhoneNumber",
+    "servicerating": "ServiceRating",
+    "foodrating": "FoodRating",
+    "ambiencerating": "AmbienceRating",
+    "cleanlinessrating": "CleanlinessRating",
+    "reviewtext": "ReviewText",
+    "wasteid": "WasteID",
+    "ingredientcost": "IngredientCost",
+    "expenseid": "ExpenseID",
+    "expensedate": "ExpenseDate",
+    "expenseamount": "ExpenseAmount",
+    "expensetype": "ExpenseType",
+    "description": "Description",
+    "waitername": "WaiterName",
+    "totalcustomershandled": "TotalCustomersHandled",
+    "avgservicerating": "AvgServiceRating",
+    "totalperformancepoints": "TotalPerformancePoints",
+    "chefname": "ChefName",
+    "totaldishesprepared": "TotalDishesPrepared",
+    "avgfoodrating": "AvgFoodRating",
+    "culinaryperformancepoints": "CulinaryPerformancePoints",
+    "collectiondate": "CollectionDate",
+    "totalcashcollected": "TotalCashCollected",
+    "totalupicollected": "TotalUPICollected",
+    "totalshiftcollection": "TotalShiftCollection",
+    "reportingmonth": "ReportingMonth",
+    "totalincomingrevenue": "TotalIncomingRevenue",
+    "totaloutgoingexpenses": "TotalOutgoingExpenses",
+    "netprofitloss": "NetProfitLoss",
+    "profitmarginpercentage": "ProfitMarginPercentage",
+    "profitpercentage": "ProfitPercentage",
+    "tablenumbersstr": "TableNumbersStr",
+    "billtotal": "BillTotal",
+}
+
+
 class PgRow(dict):
-    """Row wrapper that provides case-insensitive key access and integer index access."""
+    """Row wrapper that provides case-insensitive key access, canonical schema casing, and integer index access."""
     def __init__(self, cols, values):
         super().__init__()
         self._values = list(values)
         self._col_map = {}
         for idx, col in enumerate(cols):
-            self._col_map[col.lower()] = col
-            dict.__setitem__(self, col, values[idx])
+            low = col.lower()
+            canon = CANONICAL_COLUMNS.get(low, col)
+            self._col_map[low] = canon
+            val = values[idx]
+            dict.__setitem__(self, col, val)
+            dict.__setitem__(self, canon, val)
+            dict.__setitem__(self, low, val)
 
     def __getitem__(self, key):
         if isinstance(key, int):

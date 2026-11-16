@@ -88,16 +88,52 @@ def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depen
 
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User account no longer exists.")
-    if not user["IsActive"]:
+
+    is_active = user.get("IsActive") if user.get("IsActive") is not None else user.get("isactive")
+    if not is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Personnel account is retired / inactive.")
 
-    return dict(user)
+    u_role = user.get("RoleName") or user.get("rolename") or user.get("role")
+    u_name = user.get("StaffName") or user.get("staffname") or user.get("name")
+    u_emp_id = user.get("EmployeeID") or user.get("employeeid")
+    u_user_id = user.get("UserID") or user.get("userid")
+    u_uname = user.get("Username") or user.get("username")
+    u_role_id = user.get("RoleID") or user.get("roleid")
+
+    return {
+        "UserID": u_user_id,
+        "user_id": u_user_id,
+        "userid": u_user_id,
+        "Username": u_uname,
+        "username": u_uname,
+        "EmployeeID": u_emp_id,
+        "employee_id": u_emp_id,
+        "employeeid": u_emp_id,
+        "RoleID": u_role_id,
+        "role_id": u_role_id,
+        "roleid": u_role_id,
+        "RoleName": u_role,
+        "rolename": u_role,
+        "role": u_role,
+        "Role": u_role,
+        "StaffName": u_name,
+        "staff_name": u_name,
+        "staffname": u_name,
+        "IsActive": is_active,
+        "is_active": is_active,
+        "isactive": is_active,
+    }
 
 
 def require_roles(allowed_roles: List[str]):
     """RBAC Guard: Restricts endpoint access strictly to specified role names."""
     def role_checker(current_user: Dict[str, Any] = Depends(get_current_user)):
-        user_role = current_user.get("RoleName")
+        user_role = (
+            current_user.get("RoleName")
+            or current_user.get("rolename")
+            or current_user.get("role")
+            or current_user.get("Role")
+        )
         if user_role not in allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
