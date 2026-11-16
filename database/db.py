@@ -244,6 +244,7 @@ def init_db(force_reset: bool = False):
     if IS_POSTGRES:
         conn = get_connection()
         cursor = conn.cursor()
+
         # Check if Roles table exists in PostgreSQL
         cursor.execute("""
             SELECT EXISTS (
@@ -252,9 +253,31 @@ def init_db(force_reset: bool = False):
             );
         """)
         exists_row = cursor.fetchone()
-        exists = bool(exists_row and exists_row[0])
+        roles_exist = bool(exists_row and exists_row[0])
 
-        if not exists or force_reset:
+        # Check if Users table exists and is populated
+        users_exist_and_populated = False
+        if roles_exist:
+            try:
+                cursor.execute("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_schema = 'public' AND table_name = 'users'
+                    );
+                """)
+                u_table_row = cursor.fetchone()
+                if u_table_row and u_table_row[0]:
+                    cursor.execute("SELECT COUNT(*) FROM Users;")
+                    cnt = cursor.fetchone()
+                    if cnt and cnt[0] > 0:
+                        users_exist_and_populated = True
+            except Exception:
+                users_exist_and_populated = False
+                conn.rollback()
+
+        needs_full_init = force_reset or not roles_exist or not users_exist_and_populated
+
+        if needs_full_init:
             print("[Database] Initializing PostgreSQL 3NF schema...")
             with open(PG_SCHEMA_SQL_PATH, "r", encoding="utf-8") as f:
                 schema_script = f.read()
@@ -284,17 +307,21 @@ def init_db(force_reset: bool = False):
             print("[Database] PostgreSQL schema, seed data, and sequences successfully loaded.")
         else:
             print("[Database] PostgreSQL tables already initialized and persistent.")
+            # Apply non-destructive column migrations on existing DB if needed
+            try:
+                cursor.execute("ALTER TABLE Inventory ADD COLUMN IF NOT EXISTS AssignedChefID INT REFERENCES Staff(EmployeeID);")
+                cursor.execute("ALTER TABLE Purchase_Expenses ADD COLUMN IF NOT EXISTS Description TEXT;")
+                cursor.execute("ALTER TABLE Menu_Items ADD COLUMN IF NOT EXISTS IsActive BOOLEAN DEFAULT TRUE;")
+                cursor.execute("ALTER TABLE Menu_Items ADD COLUMN IF NOT EXISTS StockQuantity INT DEFAULT 10;")
+                conn.commit()
+            except Exception:
+                conn.rollback()
 
         # Ensure demo user accounts have valid bcrypt hashes in PostgreSQL
         try:
             cursor.execute("SELECT UserID, Username, PasswordHash FROM Users;")
             existing_pg_users = {row["Username"]: row for row in cursor.fetchall()}
-            if not existing_pg_users:
-                print("[Database] Users table was empty in PostgreSQL. Seeding dataset...")
-                with open(SEED_SQL_PATH, "r", encoding="utf-8") as f:
-                    seed_script = f.read()
-                conn.executescript(seed_script)
-            else:
+            if existing_pg_users:
                 import bcrypt
                 for uname, (plain_pw, valid_hash) in DEFAULT_USER_CREDENTIALS.items():
                     if uname in existing_pg_users:
@@ -309,6 +336,7 @@ def init_db(force_reset: bool = False):
                             conn.commit()
         except Exception as e:
             print(f"[Database] Warning during PostgreSQL user verification: {e}")
+            conn.rollback()
 
         conn.close()
         return

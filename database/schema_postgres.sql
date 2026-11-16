@@ -97,9 +97,11 @@ CREATE TABLE Inventory (
     IngredientID SERIAL PRIMARY KEY,
     IngredientName VARCHAR(100) NOT NULL,
     NeedsRestock BOOLEAN DEFAULT FALSE NOT NULL,
+    AssignedChefID INT NULL,
     ReportedBy_ChefID INT NULL,
     LastUpdated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_inventory_chef FOREIGN KEY (ReportedBy_ChefID) REFERENCES Staff(EmployeeID) ON DELETE SET NULL
+    CONSTRAINT fk_inventory_chef FOREIGN KEY (ReportedBy_ChefID) REFERENCES Staff(EmployeeID) ON DELETE SET NULL,
+    CONSTRAINT fk_inventory_assigned_chef FOREIGN KEY (AssignedChefID) REFERENCES Staff(EmployeeID) ON DELETE SET NULL
 );
 
 CREATE TABLE Shortage_Logs (
@@ -219,6 +221,7 @@ CREATE TABLE Purchase_Expenses (
     ExpenseDate DATE NOT NULL,
     ExpenseAmount NUMERIC(10,2) NOT NULL,
     ExpenseType VARCHAR(50) NOT NULL,
+    Description TEXT NULL,
     CONSTRAINT chk_expense_amount CHECK (ExpenseAmount > 0),
     CONSTRAINT chk_expense_type CHECK (ExpenseType IN ('Raw Materials', 'Other Investments', 'Payroll'))
 );
