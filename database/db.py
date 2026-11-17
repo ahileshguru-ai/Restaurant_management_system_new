@@ -133,6 +133,31 @@ CANONICAL_COLUMNS = {
     "profitmarginpercentage": "ProfitMarginPercentage",
     "profitpercentage": "ProfitPercentage",
     "tablenumbersstr": "TableNumbersStr",
+    "tablesstr": "TablesStr",
+    "activeorderids": "ActiveOrderIDs",
+    "activestaff": "ActiveStaff",
+    "assignedchefname": "AssignedChefName",
+    "totaltables": "TotalTables",
+    "occupiedtables": "OccupiedTables",
+    "totalrevenue": "TotalRevenue",
+    "totalcompletedorders": "TotalCompletedOrders",
+    "totalexpenses": "TotalExpenses",
+    "totalreviews": "TotalReviews",
+    "avgservice": "AvgService",
+    "avgfood": "AvgFood",
+    "ordershandled": "OrdersHandled",
+    "todaycustomers": "TodayCustomers",
+    "todaycash": "TodayCash",
+    "todayupi": "TodayUPI",
+    "todaytotal": "TodayTotal",
+    "reporterchefname": "ReporterChefName",
+    "reportername": "ReporterName",
+    "totalallexpenses": "TotalAllExpenses",
+    "wasteexpenses": "WasteExpenses",
+    "totalwastelogcost": "TotalWasteLogCost",
+    "cnt": "Cnt",
+    "demopassword": "DemoPassword",
+    "active_count": "active_count",
     "billtotal": "BillTotal",
 }
 
@@ -147,23 +172,36 @@ class PgRow(dict):
             low = col.lower()
             canon = CANONICAL_COLUMNS.get(low, col)
             self._col_map[low] = canon
+            self._col_map[canon.lower()] = canon
             val = values[idx]
             dict.__setitem__(self, col, val)
-            dict.__setitem__(self, canon, val)
             dict.__setitem__(self, low, val)
+            dict.__setitem__(self, canon, val)
 
     def __getitem__(self, key):
         if isinstance(key, int):
             return self._values[key]
         if isinstance(key, str):
+            if key in self:
+                return super().__getitem__(key)
             lower_k = key.lower()
-            if lower_k in self._col_map:
-                return dict.__getitem__(self, self._col_map[lower_k])
+            if lower_k in self:
+                return super().__getitem__(lower_k)
+            if lower_k in self._col_map and self._col_map[lower_k] in self:
+                return super().__getitem__(self._col_map[lower_k])
         return super().__getitem__(key)
 
     def get(self, key, default=None):
-        if isinstance(key, str) and key.lower() in self._col_map:
-            return dict.__getitem__(self, self._col_map[key.lower()])
+        if isinstance(key, int) and 0 <= key < len(self._values):
+            return self._values[key]
+        if isinstance(key, str):
+            if key in self:
+                return super().get(key, default)
+            lower_k = key.lower()
+            if lower_k in self:
+                return super().get(lower_k, default)
+            if lower_k in self._col_map and self._col_map[lower_k] in self:
+                return super().get(self._col_map[lower_k], default)
         return super().get(key, default)
 
 
@@ -202,6 +240,17 @@ class PgCursor:
                 clean_sql,
                 flags=re.IGNORECASE
             )
+
+        # Quote SQL aliases so PostgreSQL preserves exact casing in cursor.description
+        SQL_RESERVED_TYPES = {"DATE", "INT", "INTEGER", "NUMERIC", "TEXT", "VARCHAR", "BOOLEAN", "TIMESTAMP", "DECIMAL", "FLOAT", "BIGINT"}
+        def quote_sql_alias(m):
+            prefix = m.group(1)
+            alias = m.group(2)
+            if alias.startswith('"') or alias.upper() in SQL_RESERVED_TYPES:
+                return m.group(0)
+            return f'{prefix}AS "{alias}"'
+
+        clean_sql = re.sub(r'(\b)(?:AS\s+)([A-Za-z0-9_]+)\b', quote_sql_alias, clean_sql, flags=re.IGNORECASE)
 
         # Convert ? placeholders to %s for PostgreSQL
         if params is not None:

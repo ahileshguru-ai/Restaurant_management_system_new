@@ -123,22 +123,24 @@ def get_executive_overview(current_user: Dict[str, Any] = Depends(mgr_guard)):
 
     conn.close()
 
-    net_profit = rev["TotalRevenue"] - exp["TotalExpenses"]
-    margin = round((net_profit / exp["TotalExpenses"] * 100), 2) if exp["TotalExpenses"] > 0 else 0.0
+    rev_total = rev.get("TotalRevenue") if rev.get("TotalRevenue") is not None else rev.get("totalrevenue", 0)
+    exp_total = exp.get("TotalExpenses") if exp.get("TotalExpenses") is not None else exp.get("totalexpenses", 0)
+    net_profit = rev_total - exp_total
+    margin = round((net_profit / exp_total * 100), 2) if exp_total > 0 else 0.0
 
     return {
         "kpi": {
-            "total_revenue": rev["TotalRevenue"],
-            "total_completed_orders": rev["TotalCompletedOrders"],
-            "total_expenses": exp["TotalExpenses"],
+            "total_revenue": rev_total,
+            "total_completed_orders": rev.get("TotalCompletedOrders") if rev.get("TotalCompletedOrders") is not None else rev.get("totalcompletedorders", 0),
+            "total_expenses": exp_total,
             "net_profit_loss": round(net_profit, 2),
             "profit_margin_pct": margin,
-            "total_tables": tbl["TotalTables"],
-            "occupied_tables": tbl["OccupiedTables"] or 0,
-            "active_staff": stf["ActiveStaff"],
-            "avg_service_rating": fb["AvgService"] or 0.0,
-            "avg_food_rating": fb["AvgFood"] or 0.0,
-            "verified_reviews": fb["TotalReviews"]
+            "total_tables": tbl.get("TotalTables") if tbl.get("TotalTables") is not None else tbl.get("totaltables", 0),
+            "occupied_tables": (tbl.get("OccupiedTables") if tbl.get("OccupiedTables") is not None else tbl.get("occupiedtables")) or 0,
+            "active_staff": stf.get("ActiveStaff") if stf.get("ActiveStaff") is not None else stf.get("activestaff", 0),
+            "avg_service_rating": (fb.get("AvgService") if fb.get("AvgService") is not None else fb.get("avgservice")) or 0.0,
+            "avg_food_rating": (fb.get("AvgFood") if fb.get("AvgFood") is not None else fb.get("avgfood")) or 0.0,
+            "verified_reviews": fb.get("TotalReviews") if fb.get("TotalReviews") is not None else fb.get("totalreviews", 0)
         }
     }
 

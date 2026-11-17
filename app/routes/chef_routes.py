@@ -107,7 +107,8 @@ def get_chef_assigned_queue(current_user: Dict[str, Any] = Depends(chef_guard)):
     conn.close()
 
     for item in queue:
-        item["tables"] = [int(t) for t in item["TablesStr"].split(",")] if item["TablesStr"] else []
+        tables_val = item.get("TablesStr") if item.get("TablesStr") is not None else item.get("tablesstr")
+        item["tables"] = [int(t) for t in str(tables_val).split(",")] if tables_val else []
 
     return {"queue": queue, "assigned_chef_id": chef_id}
 

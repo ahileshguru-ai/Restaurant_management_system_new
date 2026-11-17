@@ -150,7 +150,8 @@ def get_waiter_active_orders(current_user: Dict[str, Any] = Depends(waiter_guard
             ORDER BY od.OrderDetailID;
         """, (ord_id,))
         ord_obj["items"] = [dict(r) for r in cursor.fetchall()]
-        ord_obj["tables"] = [int(t) for t in ord_obj["TableNumbersStr"].split(",")] if ord_obj["TableNumbersStr"] else []
+        tables_val = ord_obj.get("TableNumbersStr") if ord_obj.get("TableNumbersStr") is not None else ord_obj.get("tablenumbersstr")
+        ord_obj["tables"] = [int(t) for t in str(tables_val).split(",")] if tables_val else []
 
     conn.close()
     return {"orders": orders}
