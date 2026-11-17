@@ -14,11 +14,20 @@ import re
 import sqlite3
 from typing import List, Dict, Any, Optional
 from contextlib import contextmanager
+import decimal
 
 try:
     import psycopg2
     import psycopg2.extras
-except ImportError:
+    import psycopg2.extensions
+    # Automatically convert PostgreSQL NUMERIC/DECIMAL to Python float so calculations never clash with float
+    DEC2FLOAT = psycopg2.extensions.new_type(
+        psycopg2.extensions.DECIMAL.values,
+        'DEC2FLOAT',
+        lambda value, curs: float(value) if value is not None else None
+    )
+    psycopg2.extensions.register_type(DEC2FLOAT)
+except Exception:
     psycopg2 = None
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -166,14 +175,20 @@ class PgRow(dict):
     """Row wrapper that provides case-insensitive key access, canonical schema casing, and integer index access."""
     def __init__(self, cols, values):
         super().__init__()
-        self._values = list(values)
+        new_values = []
+        for v in values:
+            if isinstance(v, decimal.Decimal):
+                new_values.append(float(v))
+            else:
+                new_values.append(v)
+        self._values = new_values
         self._col_map = {}
         for idx, col in enumerate(cols):
             low = col.lower()
             canon = CANONICAL_COLUMNS.get(low, col)
             self._col_map[low] = canon
             self._col_map[canon.lower()] = canon
-            val = values[idx]
+            val = new_values[idx]
             dict.__setitem__(self, col, val)
             dict.__setitem__(self, low, val)
             dict.__setitem__(self, canon, val)
@@ -944,7 +959,7 @@ def create_order_with_tables_and_items(
                 WHERE MenuItemID = ?;
             """, (quantity, quantity, menu_item_id))
 
-            price = menu_row["Price"]
+            price = float(menu_row["Price"])
             assigned_chef_id = menu_row["AssignedChefID"]
             subtotal = round(price * quantity, 2)
             total_bill += subtotal
@@ -1010,7 +1025,7 @@ def add_item_to_order(order_id: int, menu_item_id: int, quantity: int = 1) -> Di
             WHERE MenuItemID = ?;
         """, (quantity, quantity, menu_item_id))
 
-        price = menu_row["Price"]
+        price = float(menu_row["Price"])
         subtotal = round(price * quantity, 2)
         cursor.execute("""
             INSERT INTO Order_Details (OrderID, MenuItemID, Quantity, UnitPrice, Subtotal, PreparedBy_EmployeeID, ItemStatus)
@@ -1052,7 +1067,7 @@ def chef_review_cancel_consent(order_detail_id: int, approved: bool) -> Dict[str
         if approved:
             new_status = 'Cancelled'
             # Estimate raw ingredient waste cost (~80% of item subtotal)
-            ingredient_cost = round(od["Subtotal"] * 0.80, 2)
+            ingredient_cost = round(float(od["Subtotal"]) * 0.80, 2)
             cursor.execute("UPDATE Order_Details SET ItemStatus = ? WHERE OrderDetailID = ?;", (new_status, order_detail_id))
             cursor.execute("""
                 INSERT INTO Waste_Log (OrderDetailID, IngredientCost, LogTimestamp)
@@ -1104,7 +1119,7 @@ def chef_discard_order_item(order_detail_id: int, reason: str, chef_id: Optional
             raise ValueError(f"Dish '{od['ItemName']}' is already cancelled.")
 
         # Estimate raw ingredient waste cost (~80% of item subtotal)
-        subtotal = od["Subtotal"] if od["Subtotal"] and od["Subtotal"] > 0 else (od["Price"] * od["Quantity"])
+        subtotal = float(od["Subtotal"]) if od["Subtotal"] and float(od["Subtotal"]) > 0 else (float(od["Price"]) * od["Quantity"])
         ingredient_cost = round(subtotal * 0.80, 2)
 
         reason_clean = (reason or "").strip() or "Food discarded during cooking"
@@ -1184,7 +1199,7 @@ def waiter_cancel_order_item(
             if qty_to_cancel > available_qty:
                 raise ValueError(f"Cannot cancel {qty_to_cancel} portions; only {available_qty} portion(s) available in this dish.")
 
-        unit_price = od["UnitPrice"] if od["UnitPrice"] is not None and od["UnitPrice"] > 0 else od["Price"]
+        unit_price = float(od["UnitPrice"]) if od["UnitPrice"] is not None and float(od["UnitPrice"]) > 0 else float(od["Price"])
         logged_to_waste = False
         waste_id = None
         ingredient_cost = 0.0
@@ -1367,7 +1382,7 @@ def waiter_cancel_order(order_id: int, reason: Optional[str] = None, waiter_id: 
             if it["ItemStatus"] == 'Cancelled':
                 continue
 
-            subtotal = it["Subtotal"] if it["Subtotal"] and it["Subtotal"] > 0 else (it["UnitPrice"] * it["Quantity"])
+            subtotal = float(it["Subtotal"]) if it["Subtotal"] and float(it["Subtotal"]) > 0 else (float(it["UnitPrice"]) * it["Quantity"])
 
             if it["ItemStatus"] in ('Cooking', 'Ready'):
                 # During or after cooking: goes to Waste_Log
@@ -1477,9 +1492,9 @@ def checkout_order(order_id: int, cash_amount: float, upi_amount: float) -> Dict
             WHERE OrderID = ? AND ItemStatus != 'Cancelled';
         """, (order_id,))
         bill_row = cursor.fetchone()
-        bill_total = bill_row["BillTotal"] if bill_row else 0.0
+        bill_total = float(bill_row["BillTotal"]) if bill_row and bill_row["BillTotal"] is not None else 0.0
 
-        paid_total = round(cash_amount + upi_amount, 2)
+        paid_total = round(float(cash_amount) + float(upi_amount), 2)
         if paid_total < round(bill_total, 2):
             raise ValueError(f"Total payment Rs.{paid_total:.2f} is less than total bill Rs.{bill_total:.2f}.")
 
