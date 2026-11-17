@@ -88,7 +88,9 @@ def get_chef_assigned_queue(current_user: Dict[str, Any] = Depends(chef_guard)):
         params.append(chef_id)
 
     sql += """
-        GROUP BY od.OrderDetailID
+        GROUP BY od.OrderDetailID, od.OrderID, od.MenuItemID, m.ItemName, m.Category,
+                 od.Quantity, od.Subtotal, od.ItemStatus, od.CancellationReason,
+                 o.OrderTimestamp, o.CustomerCount, s_waiter.Name
         ORDER BY 
             CASE od.ItemStatus 
                 WHEN 'Cancel Requested' THEN 1
@@ -227,9 +229,9 @@ def get_chef_menu(current_user: Dict[str, Any] = Depends(chef_guard)):
     conn = get_connection()
     cursor = conn.cursor()
     if is_admin:
-        cursor.execute("SELECT * FROM Menu_Items WHERE IsActive = 1 ORDER BY Category, ItemName;")
+        cursor.execute("SELECT * FROM Menu_Items WHERE IsActive = TRUE ORDER BY Category, ItemName;")
     else:
-        cursor.execute("SELECT * FROM Menu_Items WHERE AssignedChefID = ? AND IsActive = 1 ORDER BY Category, ItemName;", (chef_id,))
+        cursor.execute("SELECT * FROM Menu_Items WHERE AssignedChefID = ? AND IsActive = TRUE ORDER BY Category, ItemName;", (chef_id,))
     dishes = [dict(r) for r in cursor.fetchall()]
     conn.close()
     return {"dishes": dishes}
@@ -245,7 +247,7 @@ def get_active_menu_dishes(current_user: Dict[str, Any] = Depends(chef_guard)):
                s.Name AS AssignedChefName
         FROM Menu_Items m
         LEFT JOIN Staff s ON m.AssignedChefID = s.EmployeeID
-        WHERE m.IsActive = 1
+        WHERE m.IsActive = TRUE
         ORDER BY m.Category, m.ItemName;
     """)
     dishes = [dict(r) for r in cursor.fetchall()]
@@ -328,7 +330,7 @@ def submit_menu_alteration_request(
         cursor = conn.cursor()
         cursor.execute("""
             SELECT ItemName FROM Menu_Items 
-            WHERE LOWER(TRIM(ItemName)) = LOWER(TRIM(?)) AND IsActive = 1;
+            WHERE LOWER(TRIM(ItemName)) = LOWER(TRIM(?)) AND IsActive = TRUE;
         """, (dish_name,))
         existing_dish = cursor.fetchone()
         conn.close()
@@ -398,7 +400,7 @@ def toggle_ingredient_restock_flag(
             UPDATE Inventory 
             SET NeedsRestock = ?, ReportedBy_ChefID = ?, LastUpdated = CURRENT_TIMESTAMP
             WHERE IngredientID = ?;
-        """, (1 if req.needs_restock else 0, chef_id if req.needs_restock else None, ingredient_id))
+        """, (True if req.needs_restock else False, chef_id if req.needs_restock else None, ingredient_id))
 
     return {
         "status": "success",

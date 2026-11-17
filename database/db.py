@@ -176,6 +176,18 @@ class PgCursor:
 
     def execute(self, sql: str, params: Any = None):
         clean_sql = sql.strip()
+
+        # Normalize DATE('now') to ANSI CURRENT_DATE
+        clean_sql = re.sub(r"\bDATE\s*\(\s*['\"]now['\"]\s*\)", "CURRENT_DATE", clean_sql, flags=re.IGNORECASE)
+
+        # Normalize boolean column comparisons and assignments (= 1 / = 0)
+        clean_sql = re.sub(r"\b(IsActive|IsAvailable|NeedsRestock)\s*=\s*1\b", r"\1 = TRUE", clean_sql, flags=re.IGNORECASE)
+        clean_sql = re.sub(r"\b(IsActive|IsAvailable|NeedsRestock)\s*=\s*0\b", r"\1 = FALSE", clean_sql, flags=re.IGNORECASE)
+
+        # Normalize boolean CASE expressions: IsAvailable = CASE ... THEN 0 ELSE 1 END
+        clean_sql = re.sub(r"\b(IsActive|IsAvailable)\s*=\s*CASE\s+WHEN\s+([^\n;]+?)\s+THEN\s+0\s+ELSE\s+1\s+END", r"\1 = CASE WHEN \2 THEN FALSE ELSE TRUE END", clean_sql, flags=re.IGNORECASE)
+        clean_sql = re.sub(r"\b(IsActive|IsAvailable)\s*=\s*CASE\s+WHEN\s+([^\n;]+?)\s+THEN\s+1\s+ELSE\s+0\s+END", r"\1 = CASE WHEN \2 THEN TRUE ELSE FALSE END", clean_sql, flags=re.IGNORECASE)
+
         # Convert SQLite GROUP_CONCAT to PostgreSQL STRING_AGG if needed
         if "GROUP_CONCAT" in clean_sql.upper():
             clean_sql = re.sub(
@@ -423,9 +435,34 @@ def init_db(force_reset: bool = False):
                 cursor.execute("ALTER TABLE Purchase_Expenses ADD COLUMN IF NOT EXISTS Description TEXT;")
                 cursor.execute("ALTER TABLE Menu_Items ADD COLUMN IF NOT EXISTS IsActive BOOLEAN DEFAULT TRUE;")
                 cursor.execute("ALTER TABLE Menu_Items ADD COLUMN IF NOT EXISTS StockQuantity INT DEFAULT 10;")
+                cursor.execute("UPDATE Menu_Items SET IsActive = TRUE WHERE IsActive IS NULL;")
+                cursor.execute("UPDATE Menu_Items SET IsAvailable = TRUE WHERE IsAvailable IS NULL;")
+                cursor.execute("UPDATE Menu_Items SET StockQuantity = 10 WHERE StockQuantity IS NULL;")
+                cursor.execute("UPDATE Inventory SET NeedsRestock = FALSE WHERE NeedsRestock IS NULL;")
+                cursor.execute("UPDATE Staff SET IsActive = TRUE WHERE IsActive IS NULL;")
                 conn.commit()
             except Exception:
                 conn.rollback()
+
+            # Align auto-increment sequences with any pre-existing or imported rows
+            try:
+                seq_sync_sql = """
+                    SELECT setval(pg_get_serial_sequence('roles', 'roleid'), COALESCE(MAX(roleid), 1)) FROM roles;
+                    SELECT setval(pg_get_serial_sequence('staff', 'employeeid'), COALESCE(MAX(employeeid), 1)) FROM staff;
+                    SELECT setval(pg_get_serial_sequence('users', 'userid'), COALESCE(MAX(userid), 1)) FROM users;
+                    SELECT setval(pg_get_serial_sequence('menu_items', 'menuitemid'), COALESCE(MAX(menuitemid), 1)) FROM menu_items;
+                    SELECT setval(pg_get_serial_sequence('inventory', 'ingredientid'), COALESCE(MAX(ingredientid), 1)) FROM inventory;
+                    SELECT setval(pg_get_serial_sequence('shortage_logs', 'logid'), COALESCE(MAX(logid), 1)) FROM shortage_logs;
+                    SELECT setval(pg_get_serial_sequence('menu_requests', 'requestid'), COALESCE(MAX(requestid), 1)) FROM menu_requests;
+                    SELECT setval(pg_get_serial_sequence('orders', 'orderid'), COALESCE(MAX(orderid), 1)) FROM orders;
+                    SELECT setval(pg_get_serial_sequence('order_details', 'orderdetailid'), COALESCE(MAX(orderdetailid), 1)) FROM order_details;
+                    SELECT setval(pg_get_serial_sequence('feedback', 'feedbackid'), COALESCE(MAX(feedbackid), 1)) FROM feedback;
+                    SELECT setval(pg_get_serial_sequence('purchase_expenses', 'expenseid'), COALESCE(MAX(expenseid), 1)) FROM purchase_expenses;
+                    SELECT setval(pg_get_serial_sequence('waste_log', 'wasteid'), COALESCE(MAX(wasteid), 1)) FROM waste_log;
+                """
+                conn.executescript(seq_sync_sql)
+            except Exception as e:
+                print(f"[Database] Notice on sequence alignment: {e}")
 
             # Ensure triggers are active
             try:
@@ -537,7 +574,7 @@ def init_db(force_reset: bool = False):
     if "StockQuantity" not in item_cols_now:
         cursor.execute("ALTER TABLE Menu_Items ADD COLUMN StockQuantity INTEGER NOT NULL DEFAULT 10 CHECK (StockQuantity >= 0);")
         cursor.execute("UPDATE Menu_Items SET StockQuantity = 10 WHERE StockQuantity IS NULL;")
-        cursor.execute("UPDATE Menu_Items SET IsAvailable = CASE WHEN StockQuantity > 0 THEN 1 ELSE 0 END;")
+        cursor.execute("UPDATE Menu_Items SET IsAvailable = CASE WHEN StockQuantity > 0 THEN TRUE ELSE FALSE END;")
         conn.commit()
 
     # Ensure AssignedChefID column exists on Inventory (station-specific ingredient inventory)
@@ -688,12 +725,12 @@ def execute_handover_protocol(
             cursor.execute("DELETE FROM Users WHERE UserID = ?;", (current_user["UserID"],))
 
             # 2. Soft-retire manager in Staff
-            cursor.execute("UPDATE Staff SET IsActive = 0 WHERE EmployeeID = ?;", (departing_emp_id,))
+            cursor.execute("UPDATE Staff SET IsActive = FALSE WHERE EmployeeID = ?;", (departing_emp_id,))
 
         # 3. INSERT incoming employee into Staff
         cursor.execute("""
             INSERT INTO Staff (Name, RoleID, Role, Shift, IsActive, Salary)
-            VALUES (?, ?, ?, ?, 1, ?);
+            VALUES (?, ?, ?, ?, TRUE, ?);
         """, (new_employee_name, role_id, admin_role_name, shift, salary))
         new_employee_id = cursor.lastrowid
 
@@ -734,7 +771,7 @@ def update_menu_item_stock(menu_item_id: int, stock_quantity: int, chef_id: Opti
         if chef_id is not None and item["AssignedChefID"] != chef_id:
             raise PermissionError("You can only manage stock for dishes assigned to your culinary station.")
 
-        new_is_available = 1 if stock_quantity > 0 else 0
+        new_is_available = True if stock_quantity > 0 else False
         cursor.execute("""
             UPDATE Menu_Items 
             SET StockQuantity = ?, IsAvailable = ?
@@ -769,7 +806,7 @@ def out_of_stock_atomic_transaction(menu_item_id: int, chef_id: int, shortage_re
         if not item:
             raise ValueError(f"MenuItemID {menu_item_id} not found.")
 
-        cursor.execute("UPDATE Menu_Items SET StockQuantity = 0, IsAvailable = 0 WHERE MenuItemID = ?;", (menu_item_id,))
+        cursor.execute("UPDATE Menu_Items SET StockQuantity = 0, IsAvailable = FALSE WHERE MenuItemID = ?;", (menu_item_id,))
         cursor.execute("""
             INSERT INTO Shortage_Logs (MenuItemID, ChefID, Reason, LogTimestamp)
             VALUES (?, ?, ?, CURRENT_TIMESTAMP);
@@ -805,7 +842,7 @@ def create_order_with_tables_and_items(
         cursor = conn.cursor()
 
         # Verify waiter
-        cursor.execute("SELECT EmployeeID, Name FROM Staff WHERE EmployeeID = ? AND Role = 'Waiter' AND IsActive = 1;", (waiter_id,))
+        cursor.execute("SELECT EmployeeID, Name FROM Staff WHERE EmployeeID = ? AND Role = 'Waiter' AND IsActive = TRUE;", (waiter_id,))
         waiter = cursor.fetchone()
         if not waiter:
             raise ValueError(f"Active waiter with EmployeeID {waiter_id} not found.")
@@ -854,7 +891,7 @@ def create_order_with_tables_and_items(
             cursor.execute("""
                 UPDATE Menu_Items
                 SET StockQuantity = StockQuantity - ?,
-                    IsAvailable = CASE WHEN StockQuantity - ? <= 0 THEN 0 ELSE 1 END
+                    IsAvailable = CASE WHEN StockQuantity - ? <= 0 THEN FALSE ELSE TRUE END
                 WHERE MenuItemID = ?;
             """, (quantity, quantity, menu_item_id))
 
@@ -920,7 +957,7 @@ def add_item_to_order(order_id: int, menu_item_id: int, quantity: int = 1) -> Di
         cursor.execute("""
             UPDATE Menu_Items
             SET StockQuantity = StockQuantity - ?,
-                IsAvailable = CASE WHEN StockQuantity - ? <= 0 THEN 0 ELSE 1 END
+                IsAvailable = CASE WHEN StockQuantity - ? <= 0 THEN FALSE ELSE TRUE END
             WHERE MenuItemID = ?;
         """, (quantity, quantity, menu_item_id))
 
@@ -1132,7 +1169,7 @@ def waiter_cancel_order_item(
                 cursor.execute("""
                     UPDATE Menu_Items
                     SET StockQuantity = StockQuantity + ?,
-                        IsAvailable = 1
+                        IsAvailable = TRUE
                     WHERE MenuItemID = ?;
                 """, (qty_to_cancel, od["MenuItemID"]))
 
@@ -1192,7 +1229,7 @@ def waiter_cancel_order_item(
                 cursor.execute("""
                     UPDATE Menu_Items
                     SET StockQuantity = StockQuantity + ?,
-                        IsAvailable = 1
+                        IsAvailable = TRUE
                     WHERE MenuItemID = ?;
                 """, (qty_to_cancel, od["MenuItemID"]))
                 msg = (f"Cancelled {qty_to_cancel} of {available_qty} '{od['ItemName']}' before cooking. "
@@ -1316,7 +1353,7 @@ def waiter_cancel_order(order_id: int, reason: Optional[str] = None, waiter_id: 
                 cursor.execute("""
                     UPDATE Menu_Items
                     SET StockQuantity = StockQuantity + ?,
-                        IsAvailable = 1
+                        IsAvailable = TRUE
                     WHERE MenuItemID = ?;
                 """, (it["Quantity"], it["MenuItemID"]))
 

@@ -75,7 +75,7 @@ def get_centralized_menu(current_user: Dict[str, Any] = Depends(waiter_guard)):
                m.AssignedChefID, s.Name AS AssignedChefName
         FROM Menu_Items m
         JOIN Staff s ON m.AssignedChefID = s.EmployeeID
-        WHERE m.IsActive = 1
+        WHERE m.IsActive = TRUE
         ORDER BY m.Category, m.ItemName;
     """)
     items = [dict(r) for r in cursor.fetchall()]
@@ -94,7 +94,7 @@ def get_tables_status(current_user: Dict[str, Any] = Depends(waiter_guard)):
         FROM Tables t
         LEFT JOIN Order_Tables ot ON t.TableNumber = ot.TableNumber
         LEFT JOIN Orders o ON ot.OrderID = o.OrderID AND o.OrderStatus = 'In Progress'
-        GROUP BY t.TableNumber
+        GROUP BY t.TableNumber, t.SeatingCapacity, t.CurrentStatus
         ORDER BY t.TableNumber;
     """)
     tables = [dict(r) for r in cursor.fetchall()]
@@ -131,7 +131,7 @@ def get_waiter_active_orders(current_user: Dict[str, Any] = Depends(waiter_guard
         sql += " AND o.WaiterID = ?"
         params.append(waiter_id)
 
-    sql += " GROUP BY o.OrderID ORDER BY o.OrderTimestamp DESC;"
+    sql += " GROUP BY o.OrderID, o.WaiterID, s.Name, o.CustomerCount, o.OrderTimestamp, o.CashAmount, o.UPIAmount, o.OrderStatus ORDER BY o.OrderTimestamp DESC;"
 
     cursor.execute(sql, tuple(params))
     orders = [dict(r) for r in cursor.fetchall()]
@@ -382,7 +382,7 @@ def get_daily_collection_summary(current_user: Dict[str, Any] = Depends(waiter_g
             COALESCE(SUM(CashAmount + UPIAmount), 0) AS TodayTotal,
             COUNT(*) AS OrdersHandled
         FROM Orders
-        WHERE WaiterID = ? AND DATE(OrderTimestamp) = DATE('now');
+        WHERE WaiterID = ? AND DATE(OrderTimestamp) = CURRENT_DATE;
     """, (waiter_id,))
     summary = dict(cursor.fetchone())
     conn.close()

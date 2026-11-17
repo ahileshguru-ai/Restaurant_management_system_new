@@ -49,7 +49,7 @@ def get_kitchen_chefs(current_user: Dict[str, Any] = Depends(km_guard)):
     cursor.execute("""
         SELECT EmployeeID, Name, Shift
         FROM Staff
-        WHERE Role = 'Chef' AND IsActive = 1
+        WHERE Role = 'Chef' AND IsActive = TRUE
         ORDER BY EmployeeID ASC;
     """)
     chefs = [dict(r) for r in cursor.fetchall()]
@@ -74,7 +74,7 @@ def get_raw_inventory(current_user: Dict[str, Any] = Depends(km_guard)):
     inventory = [dict(r) for r in cursor.fetchall()]
 
     # Shortages queue
-    shortages = [item for item in inventory if item["NeedsRestock"] == 1]
+    shortages = [item for item in inventory if item["NeedsRestock"]]
     conn.close()
 
     return {
@@ -97,7 +97,7 @@ def update_ingredient_restock(
             UPDATE Inventory 
             SET NeedsRestock = ?, ReportedBy_ChefID = NULL, LastUpdated = CURRENT_TIMESTAMP
             WHERE IngredientID = ?;
-        """, (1 if req.needs_restock else 0, ingredient_id))
+        """, (True if req.needs_restock else False, ingredient_id))
 
     return {"status": "success", "ingredient_id": ingredient_id, "needs_restock": req.needs_restock}
 
@@ -113,7 +113,7 @@ def add_new_ingredient(
         cursor.execute("""
             INSERT INTO Inventory (IngredientName, NeedsRestock, AssignedChefID, LastUpdated)
             VALUES (?, ?, ?, CURRENT_TIMESTAMP);
-        """, (req.ingredient_name.strip(), 1 if req.needs_restock else 0, req.assigned_chef_id))
+        """, (req.ingredient_name.strip(), True if req.needs_restock else False, req.assigned_chef_id))
         ing_id = cursor.lastrowid
 
     return {
@@ -205,13 +205,13 @@ def process_menu_request(
                 if existing:
                     cursor.execute("""
                         UPDATE Menu_Items 
-                        SET Category = ?, Price = ?, StockQuantity = 10, IsAvailable = 1, AssignedChefID = ?, IsActive = 1
+                        SET Category = ?, Price = ?, StockQuantity = 10, IsAvailable = TRUE, AssignedChefID = ?, IsActive = TRUE
                         WHERE MenuItemID = ?;
                     """, (req.category, req.price, chef_id, existing["MenuItemID"]))
                 else:
                     cursor.execute("""
                         INSERT INTO Menu_Items (ItemName, Category, Price, StockQuantity, IsAvailable, AssignedChefID, IsActive)
-                        VALUES (?, ?, ?, 10, 1, ?, 1);
+                        VALUES (?, ?, ?, 10, TRUE, ?, TRUE);
                     """, (mr["DishName"], req.category, req.price, chef_id))
                 msg += f" Added to active menu under category '{req.category}' at Rs.{req.price}."
             elif mr["RequestType"] == 'Remove':
@@ -232,7 +232,7 @@ def process_menu_request(
                     else:
                         cursor.execute("""
                             UPDATE Menu_Items 
-                            SET IsActive = 0, IsAvailable = 0 
+                            SET IsActive = FALSE, IsAvailable = FALSE 
                             WHERE MenuItemID = ?;
                         """, (item_id,))
                         msg += f" Dish '{matched['ItemName']}' removed from active menu."

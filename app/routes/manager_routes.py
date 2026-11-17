@@ -114,7 +114,7 @@ def get_executive_overview(current_user: Dict[str, Any] = Depends(mgr_guard)):
     tbl = cursor.fetchone()
 
     # Total Active Personnel
-    cursor.execute("SELECT COUNT(*) AS ActiveStaff FROM Staff WHERE IsActive = 1;")
+    cursor.execute("SELECT COUNT(*) AS ActiveStaff FROM Staff WHERE IsActive = TRUE;")
     stf = cursor.fetchone()
 
     # Total Customer Feedbacks
@@ -238,7 +238,7 @@ def delete_or_retire_staff(
 
         if has_history:
             # Soft-retire in Staff to protect historical order data and 3NF foreign keys
-            tx_cur.execute("UPDATE Staff SET IsActive = 0 WHERE EmployeeID = ?;", (employee_id,))
+            tx_cur.execute("UPDATE Staff SET IsActive = FALSE WHERE EmployeeID = ?;", (employee_id,))
             msg = f"{emp['Role']} '{emp['Name']}' has been retired and their login access revoked. Historical order records are safely preserved."
         else:
             # Hard delete if clean record

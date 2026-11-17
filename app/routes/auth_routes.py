@@ -111,7 +111,7 @@ def get_demo_profiles():
         FROM Users u
         JOIN Roles r ON u.RoleID = r.RoleID
         JOIN Staff s ON u.EmployeeID = s.EmployeeID
-        WHERE s.IsActive = 1
+        WHERE s.IsActive = TRUE
         ORDER BY r.RoleID, s.EmployeeID;
     """)
     profiles = [dict(row) for row in cursor.fetchall()]
@@ -224,7 +224,7 @@ def register_new_staff_and_user(
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO Staff (Name, RoleID, Role, Shift, IsActive, Salary)
-            VALUES (?, ?, ?, ?, 1, ?);
+            VALUES (?, ?, ?, ?, TRUE, ?);
         """, (req.name.strip(), role_id, req.role, req.shift, req.salary))
         emp_id = cursor.lastrowid
 

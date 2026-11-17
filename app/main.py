@@ -66,7 +66,7 @@ def startup_event():
     print("[Server] Relational Database Initialized & Ready.")
 
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def serve_index():
     """Serves the White-and-Green Bubble UI single page application."""
     index_file = os.path.join(STATIC_DIR, "index.html")
